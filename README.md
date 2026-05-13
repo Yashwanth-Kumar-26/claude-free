@@ -11,10 +11,10 @@ Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — using
 ./setup.sh
 ```
 
-This sets up:
-- Backend providers (OpenRouter, NVIDIA NIM, OpenCode)
-- Model configuration
-- API keys from environment
+This fetches the latest providers and models from [models.dev](https://github.com/anomalyco/models.dev.git), then guides you through:
+- Selecting a backend provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
+- Picking models for each tier (default/opus/sonnet/haiku)
+- Entering API keys
 
 **Step 1B:** Configure environment variables:
 

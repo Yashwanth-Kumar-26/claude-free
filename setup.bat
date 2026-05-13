@@ -186,7 +186,7 @@ if not "%API_KEY%"=="" (
     > "%ENV_FILE%" (
         echo # claudefree credentials
         echo %API_KEY_VAR%=%API_KEY%
-        echo ANTHROPIC_AUTH_TOKEN=fr
+        echo ANTHROPIC_AUTH_TOKEN=God
     )
 )
 
@@ -212,6 +212,13 @@ if exist "%SCRIPT_DIR%.gitignore" (
 )
 
 del "%TEMP_API%" "%TEMP%\cf_*.txt" 2>nul
+
+REM Install claude-start-server.bat to PATH
+copy /y "%SCRIPT_DIR%claude-start-server.bat" "%USERPROFILE%\.local\bin\" >nul 2>&1
+if errorlevel 1 (
+    echo [INFO] Could not install to %%USERPROFILE%%\.local\bin
+    echo        Add "%SCRIPT_DIR%" to your PATH or run claude-start-server from the project folder.
+)
 
 echo.
 echo ============================================================

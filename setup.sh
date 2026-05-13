@@ -325,7 +325,7 @@ if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" <<EOF
 # claudefree credentials
 ${PROVIDER_UPPER}_API_KEY="$API_KEY"
-ANTHROPIC_AUTH_TOKEN="fr"
+ANTHROPIC_AUTH_TOKEN="God"
 EOF
 else
     # Append if not already present
@@ -356,7 +356,26 @@ echo -e "   ${YELLOW}[WARN]  Make sure .env is in .gitignore!${NC}\n"
 rm -f "$TEMP_API"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 7. Success message
+# 7. Install claude-start-server to PATH
+# ═══════════════════════════════════════════════════════════════════════════════
+
+echo -e "${BLUE}[7/7] Installing claude-start-server to PATH...${NC}"
+
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+
+CLI_SCRIPT="$SCRIPT_DIR/claude-start-server"
+if [ -f "$CLI_SCRIPT" ]; then
+    ln -sf "$CLI_SCRIPT" "$LOCAL_BIN/claude-start-server" 2>/dev/null || {
+        cp "$CLI_SCRIPT" "$LOCAL_BIN/claude-start-server" 2>/dev/null
+    }
+    echo -e "${GREEN}[OK] Installed to $LOCAL_BIN/claude-start-server${NC}"
+else
+    echo -e "${YELLOW}[WARN] claude-start-server script not found at $CLI_SCRIPT${NC}"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 8. Success message
 # ═══════════════════════════════════════════════════════════════════════════════
 
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -e
-DIR="$(cd "$(dirname "$0")" && pwd)"
+DIR="$(python3 -c "import os; print(os.path.dirname(os.path.realpath('${0}')))")"
 exec uv run --directory "$DIR" python -m cli.entrypoints "$@"

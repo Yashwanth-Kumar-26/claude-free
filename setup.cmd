@@ -22,22 +22,28 @@ if exist ".env" (
     if not errorlevel 1 set "ALREADY_CONFIGURED=1"
 )
 
-REM --- Check/Install fzy ---
+REM --- Check/Install fzy via scoop ---
 set "FZY_AVAILABLE=0"
 where fzy.exe >nul 2>&1 && set "FZY_AVAILABLE=1"
 if "%FZY_AVAILABLE%"=="0" where fzy >nul 2>&1 && set "FZY_AVAILABLE=1"
 if "%FZY_AVAILABLE%"=="0" (
-    echo [INFO] Installing fzy...
-    where winget >nul 2>&1 && (winget install fzy >nul 2>&1 && set "FZY_AVAILABLE=1")
+    where scoop >nul 2>&1
+    if errorlevel 1 (
+        echo [INFO] scoop not found. Installing scoop (requires PowerShell^)...
+        powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" >nul 2>&1
+        powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh'))" >nul 2>&1
+        if errorlevel 1 (
+            echo [WARN] Failed to install scoop automatically.
+        )
+    )
+    where scoop >nul 2>&1 && (
+        echo [INFO] Installing fzy via scoop...
+        scoop install fzy >nul 2>&1 && set "FZY_AVAILABLE=1"
+    )
 )
 if "%FZY_AVAILABLE%"=="0" (
-    where choco >nul 2>&1 && (choco install fzy -y >nul 2>&1 && set "FZY_AVAILABLE=1")
-)
-if "%FZY_AVAILABLE%"=="0" (
-    where scoop >nul 2>&1 && (scoop install fzy >nul 2>&1 && set "FZY_AVAILABLE=1")
-)
-if "%FZY_AVAILABLE%"=="0" (
-    echo [WARN] Could not install fzy. Falling back to numbered menu.
+    echo [WARN] Could not install fzy. Install manually: scoop install fzy
+    echo        Falling back to numbered menu.
 )
 echo.
 
@@ -140,7 +146,7 @@ REM Step 4: Select models
 REM ────────────────────────────────────────────────────────────
 echo [4/4] Fetching models for %SELECTED_PROVIDER%...
 echo.
-%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.%SELECTED_PROVIDER%.models.PSObject.Properties.Name | Sort-Object) -join '|'" > "%TEMP%\cf_models.txt"
+%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.%SELECTED_PROVIDER%.models.PSObject.Properties.Name | Sort-Order) -join '|'" > "%TEMP%\cf_models.txt"
 set /p ALL_MODELS=<"%TEMP%\cf_models.txt"
 
 if "%ALL_MODELS%"=="" (
@@ -208,8 +214,7 @@ if "%ALREADY_CONFIGURED%"=="0" (
     echo [INFO] Setting ANTHROPIC environment variables...
     setx ANTHROPIC_AUTH_TOKEN "God" >nul
     setx ANTHROPIC_BASE_URL "http://localhost:16324" >nul
-    echo [OK] Added to user environment variables.
-    echo [INFO] Restart your terminal or log out/in for changes to take effect.
+    echo [OK] Added to user environment vars. Restart your terminal.
 ) else (
     echo [OK] Environment already configured, skipping.
 )

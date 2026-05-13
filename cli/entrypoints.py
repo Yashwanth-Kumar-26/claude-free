@@ -44,4 +44,8 @@ def init() -> None:
         env_file.write_text("# claudefree configuration\nMODEL=nvidia_nim/z-ai/glm4.7\n")
         print(f"Created minimal config at {env_file}")
 
-    print("Edit the file and set your API keys, then run: claudefree")
+    print("Edit the file and set your API keys, then run: claude-start-server")
+
+
+if __name__ == "__main__":
+    serve()

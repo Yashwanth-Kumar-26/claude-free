@@ -92,12 +92,7 @@ echo %ANTHROPIC_BASE_URL%
 
 **Terminal 1 - Start server (after setup.sh):**
 ```bash
-claudefree
-```
-
-Or with Claude Serve:
-```bash
-claude serve
+claude-start-server
 ```
 
 Or manually with uvicorn:
@@ -117,7 +112,7 @@ python serverip.py
 
 This shows your local IP address and connection instructions for remote access on the same network.
 
-That's it! After setup, just run `claudefree` to start the server and `claude` to connect.
+That's it! After setup, just run `claude-start-server` to start the server and `claude` to connect.
 
 ---
 

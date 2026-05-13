@@ -221,7 +221,7 @@ echo.
 echo  Next steps:
 echo.
 echo   1. Start the proxy server:
-echo      uv run uvicorn server:app --host 0.0.0.0 --port 16324
+echo      claude-start-server
 echo.
 echo   2. In another terminal, connect claude:
 echo      set ANTHROPIC_BASE_URL=http://localhost:16324

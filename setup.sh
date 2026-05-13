@@ -365,7 +365,7 @@ echo -e "${GREEN}═════════════════════
 
 echo -e "${BLUE}Next steps:${NC}"
 echo -e "1. Start the proxy server:"
-echo -e "   ${YELLOW}uv run uvicorn server:app --host 0.0.0.0 --port 16324${NC}"
+echo -e "   ${YELLOW}claude-start-server${NC}"
 echo -e ""
 echo -e "2. In another terminal, connect claude client:"
 echo -e "   ${YELLOW}ANTHROPIC_AUTH_TOKEN="God" ANTHROPIC_BASE_URL="http://localhost:16324" claude${NC}"

@@ -1,6 +1,6 @@
 # claudefree: Universal Provider Proxy
 
-Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — including OpenCode Go/Zen.
+Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — using 
 
 ## Quick Start
 
@@ -38,19 +38,13 @@ See [SETUP_ENV.md](SETUP_ENV.md) for detailed instructions.
 
 ### 2. Start Server
 
-**Option A: Using claudefree command (Recommended - After setup.sh)**
+**Option A: Using claude-start-server (Recommended - After setup.sh)**
 ```bash
-claudefree
+claude-start-server
 ```
 Automatically starts the ClaudeFree server on port 16324 using your configured backend.
 
-**Option B: Using Claude Serve**
-```bash
-claude serve
-```
-Integrates with Claude Code's native serve command.
-
-**Option C: Using uv/uvicorn directly**
+**Option B: Using uv/uvicorn directly**
 ```bash
 uv run uvicorn server:app --host 0.0.0.0 --port 16324
 ```

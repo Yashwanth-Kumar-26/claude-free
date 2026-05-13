@@ -21,6 +21,12 @@ if exist ".env" (
     findstr /b "ANTHROPIC_AUTH_TOKEN=God" .env >nul 2>&1
     if not errorlevel 1 set "ALREADY_CONFIGURED=1"
 )
+if "%ALREADY_CONFIGURED%"=="1" (
+    echo [OK] Shell env already configured, skipping!
+) else (
+    echo [INFO] Shell env not configured — will set up at the end.
+)
+echo.
 
 REM --- Install fzf (Windows-supported fuzzy finder) ---
 set "FZF_AVAILABLE=0"

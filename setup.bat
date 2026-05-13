@@ -2,7 +2,6 @@
 setlocal enabledelayedexpansion
 
 chcp 65001 >nul
-
 cls
 echo ============================================================
 echo    claudefree Setup for Windows
@@ -16,36 +15,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM --- Detect if already configured ---
+set "ALREADY_CONFIGURED=0"
+if exist ".env" (
+    findstr /b "ANTHROPIC_AUTH_TOKEN=God" .env >nul 2>&1
+    if not errorlevel 1 set "ALREADY_CONFIGURED=1"
+)
+
 REM --- Check/Install fzy ---
 set "FZY_AVAILABLE=0"
 where fzy.exe >nul 2>&1 && set "FZY_AVAILABLE=1"
 if "%FZY_AVAILABLE%"=="0" where fzy >nul 2>&1 && set "FZY_AVAILABLE=1"
-
 if "%FZY_AVAILABLE%"=="0" (
-    echo [INFO] fzy (fuzzy finder) not found. Installing...
-    where winget >nul 2>&1
-    if not errorlevel 1 (
-        winget install fzy >nul 2>&1
-        if not errorlevel 1 set "FZY_AVAILABLE=1"
-    )
+    echo [INFO] Installing fzy...
+    where winget >nul 2>&1 && (winget install fzy >nul 2>&1 && set "FZY_AVAILABLE=1")
 )
 if "%FZY_AVAILABLE%"=="0" (
-    where choco >nul 2>&1
-    if not errorlevel 1 (
-        choco install fzy -y >nul 2>&1
-        if not errorlevel 1 set "FZY_AVAILABLE=1"
-    )
+    where choco >nul 2>&1 && (choco install fzy -y >nul 2>&1 && set "FZY_AVAILABLE=1")
 )
 if "%FZY_AVAILABLE%"=="0" (
-    where scoop >nul 2>&1
-    if not errorlevel 1 (
-        scoop install fzy >nul 2>&1
-        if not errorlevel 1 set "FZY_AVAILABLE=1"
-    )
+    where scoop >nul 2>&1 && (scoop install fzy >nul 2>&1 && set "FZY_AVAILABLE=1")
 )
 if "%FZY_AVAILABLE%"=="0" (
-    echo [WARN] Could not install fzy automatically.
-    echo        Falling back to numbered menu.
+    echo [WARN] Could not install fzy. Falling back to numbered menu.
 )
 echo.
 
@@ -65,7 +57,7 @@ echo.
 set "TEMP_API=%TEMP%\claudefree_providers.json"
 curl -s https://models.dev/api.json -o "%TEMP_API%" 2>&1
 if errorlevel 1 (
-    echo [ERROR] Failed to fetch providers from models.dev
+    echo [ERROR] Failed to fetch providers
     pause
     exit /b 1
 )
@@ -84,7 +76,7 @@ if "%FZY_AVAILABLE%"=="1" goto fzy_provider
 goto menu_provider
 
 :fzy_provider
-echo (Type to filter, press Enter to select^)
+echo (Type to filter, Enter to select)
 %PS% -NoProfile -Command "$data = Get-Content '%TEMP%\cf_providers.txt' -Raw; $data -split '\|' | fzy" > "%TEMP%\cf_selected.txt"
 set /p SELECTED_PROVIDER=<"%TEMP%\cf_selected.txt"
 if "%SELECTED_PROVIDER%"=="" (
@@ -132,7 +124,7 @@ if exist "%ENV_FILE%" (
     )
 )
 if not "%API_KEY%"=="" (
-    echo [OK] API key already found in .env
+    echo [OK] API key found in .env
 ) else (
     set /p "API_KEY=Enter API key: "
     if "%API_KEY%"=="" (
@@ -144,7 +136,7 @@ if not "%API_KEY%"=="" (
 )
 
 REM ────────────────────────────────────────────────────────────
-REM Step 4: Select models per tier
+REM Step 4: Select models
 REM ────────────────────────────────────────────────────────────
 echo [4/4] Fetching models for %SELECTED_PROVIDER%...
 echo.
@@ -152,7 +144,7 @@ echo.
 set /p ALL_MODELS=<"%TEMP%\cf_models.txt"
 
 if "%ALL_MODELS%"=="" (
-    echo [ERROR] No models found for %SELECTED_PROVIDER%
+    echo [ERROR] No models found
     del "%TEMP_API%" "%TEMP%\cf_*.txt" 2>nul
     pause
     exit /b 1
@@ -160,7 +152,6 @@ if "%ALL_MODELS%"=="" (
 echo [OK] Models fetched
 echo.
 
-REM Build model array
 set "idx=0"
 for %%M in ("%ALL_MODELS:|= "%") do (
     set /a idx+=1
@@ -178,7 +169,7 @@ call :select_model HAIKU
 set "MODEL_HAIKU=%MODEL_RESULT%"
 
 REM ────────────────────────────────────────────────────────────
-REM Step 5: Save configuration
+REM Step 5: Save config
 REM ────────────────────────────────────────────────────────────
 echo Saving configuration...
 
@@ -202,22 +193,38 @@ if not "%API_KEY%"=="" (
 
 if exist "%SCRIPT_DIR%.gitignore" (
     findstr /b /c:".env" "%SCRIPT_DIR%.gitignore" >nul 2>&1
-    if errorlevel 1 (
-        echo .env>> "%SCRIPT_DIR%.gitignore"
-        echo [INFO] Added .env to .gitignore
-    )
+    if errorlevel 1 (echo .env>> "%SCRIPT_DIR%.gitignore")
 ) else (
     echo .env> "%SCRIPT_DIR%.gitignore"
-    echo [INFO] Created .gitignore with .env
 )
 
 del "%TEMP_API%" "%TEMP%\cf_*.txt" 2>nul
 
-REM Install claude-start-server.bat to PATH
-copy /y "%SCRIPT_DIR%claude-start-server.bat" "%USERPROFILE%\.local\bin\" >nul 2>&1
-if errorlevel 1 (
-    echo [INFO] Could not install to %%USERPROFILE%%\.local\bin
-    echo        Add "%SCRIPT_DIR%" to your PATH or run claude-start-server from the project folder.
+REM ────────────────────────────────────────────────────────────
+REM Step 6: Shell env vars (only if not already configured)
+REM ────────────────────────────────────────────────────────────
+echo.
+if "%ALREADY_CONFIGURED%"=="0" (
+    echo [INFO] Setting ANTHROPIC environment variables...
+    setx ANTHROPIC_AUTH_TOKEN "God" >nul
+    setx ANTHROPIC_BASE_URL "http://localhost:16324" >nul
+    echo [OK] Added to user environment variables.
+    echo [INFO] Restart your terminal or log out/in for changes to take effect.
+) else (
+    echo [OK] Environment already configured, skipping.
+)
+
+REM ────────────────────────────────────────────────────────────
+REM Step 7: Install claude-start-server to PATH
+REM ────────────────────────────────────────────────────────────
+if exist "%SCRIPT_DIR%claude-start-server.bat" (
+    mkdir "%USERPROFILE%\.local\bin" 2>nul
+    copy /y "%SCRIPT_DIR%claude-start-server.bat" "%USERPROFILE%\.local\bin\" >nul 2>&1
+    if not errorlevel 1 (
+        echo [OK] Installed to %%USERPROFILE%%\.local\bin
+    ) else (
+        echo [INFO] Add %SCRIPT_DIR% to your PATH
+    )
 )
 
 echo.
@@ -227,21 +234,18 @@ echo ============================================================
 echo.
 echo  Next steps:
 echo.
-echo   1. Start the proxy server:
-echo      claude-start-server
+echo   1. Start proxy:  claude-start-server
 echo.
-echo   2. In another terminal, connect claude:
-echo      set ANTHROPIC_BASE_URL=http://localhost:16324
-echo      claude
+echo   2. Run claude:   claude
 echo.
-echo  Configuration: %CONFIG_FILE%
-echo  Credentials:   %ENV_FILE%
+echo  Config:  %CONFIG_FILE%
+echo  Secrets: %ENV_FILE%
 echo.
 pause
 exit /b 0
 
 REM ────────────────────────────────────────────────────────────
-REM :select_model — fzy or numbered menu for a given tier
+REM :select_model
 REM ────────────────────────────────────────────────────────────
 :select_model
 set "TIER=%~1"
@@ -251,7 +255,7 @@ if "%FZY_AVAILABLE%"=="1" goto fzy_model_%TIER%
 goto menu_model_%TIER%
 
 :fzy_model_%TIER%
-echo (Type to filter, Enter to select^)
+echo (Type to filter, Enter to select)
 (
   echo [SAME_AS_DEFAULT]
   echo [CUSTOM_MODEL]
@@ -270,9 +274,7 @@ goto :eof
 echo   0. [SAME_AS_DEFAULT]
 echo   1. [CUSTOM_MODEL]
 for /l %%i in (2,1,%MODEL_COUNT%) do (
-    if %%i leq 11 (
-        echo   %%i. !MODEL_%%i!
-    )
+    if %%i leq 11 (echo   %%i. !MODEL_%%i!)
 )
 if %MODEL_COUNT% gtr 10 (
     set /a "extra=%MODEL_COUNT%-10"

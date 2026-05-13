@@ -1,315 +1,128 @@
 #!/bin/bash
+# setup.sh — claudefree setup
+#
+# Detects if shell env is already configured. If so, skips to provider selection.
+# Run with: bash setup.sh   or   source setup.sh
 
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# OS Detection
-# ═══════════════════════════════════════════════════════════════════════════════
-
-detect_os() {
-    case "$(uname -s)" in
-        Linux*)
-            if [ -f /etc/os-release ]; then
-                . /etc/os-release
-                if [ "$ID" = "fedora" ] || [ "$ID_LIKE" = "fedora" ]; then
-                    echo "fedora"
-                elif [ "$ID" = "ubuntu" ] || [ "$ID" = "debian" ] || [ "$ID_LIKE" = "debian" ]; then
-                    echo "debian"
-                elif [ "$ID" = "arch" ]; then
-                    echo "arch"
-                else
-                    echo "linux"
-                fi
-            else
-                echo "linux"
-            fi
-            ;;
-        Darwin*)
-            echo "macos"
-            ;;
-        MINGW*|MSYS*|CYGWIN*)
-            echo "windows"
-            ;;
-        *)
-            echo "unknown"
-            ;;
-    esac
-}
-
-OS=$(detect_os)
-
-# Directories - Use project folder
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/config.json"
 ENV_FILE="$SCRIPT_DIR/.env"
 
 echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  [ROCKET] claudefree Setup${NC}"
-echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}Detected OS: $OS${NC}\n"
+echo -e "${BLUE}  claudefree Setup${NC}"
+echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}\n"
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 1. Check/Install fzy
-# ═══════════════════════════════════════════════════════════════════════════════
+SHELL_CONFIG=""
+if [[ "$SHELL" == *"zsh"* ]]; then SHELL_CONFIG="$HOME/.zshrc"
+elif [[ "$SHELL" == *"bash"* ]]; then SHELL_CONFIG="$HOME/.bashrc"; fi
 
-echo -e "${BLUE}[1/4] Checking fzy installation...${NC}"
+ALREADY_CONFIGURED=0
+if grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$SHELL_CONFIG" 2>/dev/null || grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$ENV_FILE" 2>/dev/null; then
+    ALREADY_CONFIGURED=1
+fi
 
+if [ "$ALREADY_CONFIGURED" == "1" ]; then
+    echo -e "${GREEN}[OK] Shell env already configured, skipping!${NC}\n"
+else
+    echo -e "${YELLOW}[INFO] Shell env not configured — will set up at the end.${NC}\n"
+fi
+
+# ── 1. Install fzy ────────────────────────────────────────────────────────────
+
+echo -e "${BLUE}[1/4] Checking fzy...${NC}"
 if ! command -v fzy &> /dev/null; then
-    echo -e "${YELLOW}[WARN]  fzy not found. Installing...${NC}"
-    
-    case "$OS" in
-        fedora)
-            echo -e "${YELLOW}[PACKAGE] Installing fzy via dnf (Fedora)...${NC}"
-            sudo dnf install -y fzy 2>/dev/null || {
-                echo -e "${YELLOW}dnf installation failed, trying manual build...${NC}"
-                INSTALL_MANUAL=1
-            }
+    echo -e "${YELLOW}Installing fzy...${NC}"
+    case "$(uname -s)" in
+        Linux*)
+            if grep -qi 'fedora' /etc/os-release 2>/dev/null; then sudo dnf install -y fzy 2>/dev/null
+            elif grep -qi 'debian\|ubuntu' /etc/os-release 2>/dev/null; then sudo apt-get update && sudo apt-get install -y fzy 2>/dev/null
+            elif grep -qi 'arch' /etc/os-release 2>/dev/null; then sudo pacman -S fzy --noconfirm 2>/dev/null; fi
             ;;
-        debian|ubuntu)
-            echo -e "${YELLOW}[PACKAGE] Installing fzy via apt (Debian/Ubuntu)...${NC}"
-            sudo apt-get update && sudo apt-get install -y fzy 2>/dev/null || {
-                echo -e "${YELLOW}apt installation failed, trying manual build...${NC}"
-                INSTALL_MANUAL=1
-            }
-            ;;
-        arch)
-            echo -e "${YELLOW}[PACKAGE] Installing fzy via pacman (Arch)...${NC}"
-            sudo pacman -S fzy --noconfirm 2>/dev/null || {
-                echo -e "${YELLOW}pacman installation failed, trying manual build...${NC}"
-                INSTALL_MANUAL=1
-            }
-            ;;
-        macos)
-            echo -e "${YELLOW}[PACKAGE] Installing fzy via brew (macOS)...${NC}"
-            brew install fzy 2>/dev/null || {
-                echo -e "${YELLOW}brew installation failed, trying manual build...${NC}"
-                INSTALL_MANUAL=1
-            }
-            ;;
-        *)
-            echo -e "${YELLOW}Unknown OS, trying manual build...${NC}"
-            INSTALL_MANUAL=1
-            ;;
+        Darwin*) brew install fzy 2>/dev/null ;;
     esac
-    
-    # Manual build fallback
-    if [ "$INSTALL_MANUAL" = "1" ]; then
-        echo -e "${YELLOW}[HAMMER] Building fzy from source...${NC}"
-        TEMP_DIR=$(mktemp -d)
-        cd "$TEMP_DIR"
-        git clone https://github.com/jhawthorn/fzy.git || {
-            echo -e "${RED}[FAIL] Failed to clone fzy repository${NC}"
-            rm -rf "$TEMP_DIR"
-            exit 1
-        }
-        cd fzy
-        make || {
-            echo -e "${RED}[FAIL] Failed to build fzy${NC}"
-            cd - > /dev/null
-            rm -rf "$TEMP_DIR"
-            exit 1
-        }
-        sudo make install || {
-            echo -e "${RED}[FAIL] fzy installation failed. Please install manually:${NC}"
-            echo -e "${YELLOW}   git clone https://github.com/jhawthorn/fzy.git${NC}"
-            echo -e "${YELLOW}   cd fzy && make && sudo make install${NC}"
-            cd - > /dev/null
-            rm -rf "$TEMP_DIR"
-            exit 1
-        }
-        cd - > /dev/null
-        rm -rf "$TEMP_DIR"
+    if ! command -v fzy &> /dev/null; then
+        TMP=$(mktemp -d); cd "$TMP"
+        git clone https://github.com/jhawthorn/fzy.git && cd fzy && make && sudo make install
+        cd - >/dev/null; rm -rf "$TMP"
     fi
-    
-    echo -e "${GREEN}[OK] fzy installed successfully${NC}\n"
-else
-    echo -e "${GREEN}[OK] fzy already installed${NC}\n"
 fi
+echo -e "${GREEN}[OK]${NC}\n"
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 2. Check/Install claude
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── 2. Fetch providers ────────────────────────────────────────────────────────
 
-echo -e "${BLUE}[2/4] Checking claude installation...${NC}"
-
-if ! command -v claude &> /dev/null; then
-    echo -e "${YELLOW}[WARN]  claude not found. Installing...${NC}"
-    curl -fsSL https://claude.ai/install.sh | bash || {
-        echo -e "${RED}[FAIL] claude installation failed${NC}"
-        exit 1
-    }
-    echo -e "${GREEN}[OK] claude installed successfully${NC}\n"
-else
-    echo -e "${GREEN}[OK] claude already installed${NC}\n"
-fi
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 3. Fetch providers and select one
-# ═══════════════════════════════════════════════════════════════════════════════
-
-echo -e "${BLUE}[3/4] Fetching providers from models.dev...${NC}"
-
+echo -e "${BLUE}[2/4] Fetching providers from models.dev...${NC}"
 TEMP_API=$(mktemp)
-curl -s https://models.dev/api.json > "$TEMP_API" || {
-    echo -e "${RED}[FAIL] Failed to fetch providers from models.dev${NC}"
-    exit 1
-}
+curl -s https://models.dev/api.json > "$TEMP_API" || { echo -e "${RED}[FAIL]${NC}"; exit 1; }
+echo -e "${GREEN}[OK]${NC}\n"
 
-echo -e "${GREEN}[OK] Providers fetched${NC}\n"
+# ── 3. Select provider + models + API key ─────────────────────────────────────
 
-# Extract provider names
 PROVIDERS=$(jq -r 'keys[]' "$TEMP_API" | sort)
 
-echo -e "${BLUE}Select a provider:${NC}"
-
-# Try fzy first, fallback to numbered menu
-if command -v fzy &> /dev/null && [ -t 0 ]; then
+echo -e "${BLUE}Select provider:${NC}"
+if command -v fzy &>/dev/null && [ -t 0 ]; then
     SELECTED_PROVIDER=$(echo "$PROVIDERS" | fzy --prompt "Search provider: ")
 else
-    echo -e "${YELLOW}Using numbered menu${NC}\n"
     PROVIDER_ARRAY=($PROVIDERS)
-    for i in "${!PROVIDER_ARRAY[@]}"; do
-        echo "$((i+1)). ${PROVIDER_ARRAY[$i]}"
-    done
-    echo -n "Enter provider number: "
-    read -r PROVIDER_NUM
-    SELECTED_PROVIDER="${PROVIDER_ARRAY[$((PROVIDER_NUM-1))]}"
+    for i in "${!PROVIDER_ARRAY[@]}"; do echo "$((i+1)). ${PROVIDER_ARRAY[$i]}"; done
+    echo -n "Enter number: "; read -r n
+    SELECTED_PROVIDER="${PROVIDER_ARRAY[$((n-1))]}"
 fi
+[ -z "$SELECTED_PROVIDER" ] && { echo -e "${RED}[FAIL]${NC}"; exit 1; }
+echo -e "${GREEN}[OK] $SELECTED_PROVIDER${NC}\n"
 
-if [ -z "$SELECTED_PROVIDER" ]; then
-    echo -e "${RED}[FAIL] No provider selected${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}[OK] Selected provider: $SELECTED_PROVIDER${NC}\n"
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 4. Ask for API key (only if not already in .env)
-# ═══════════════════════════════════════════════════════════════════════════════
-
+# API key
 PROVIDER_UPPER=$(echo "$SELECTED_PROVIDER" | tr '[:lower:]' '[:upper:]')
 API_KEY_VAR="${PROVIDER_UPPER}_API_KEY"
-
+API_KEY=""
 if [ -f "$ENV_FILE" ] && grep -q "^${API_KEY_VAR}=" "$ENV_FILE"; then
-    echo -e "${GREEN}[OK] API key already found in .env${NC}"
     API_KEY=$(grep "^${API_KEY_VAR}=" "$ENV_FILE" | cut -d'=' -f2- | tr -d '"')
+    echo -e "${GREEN}[OK] API key found${NC}"
 else
-    echo -e "${BLUE}Enter API key for $SELECTED_PROVIDER${NC}"
-    echo -n "API key visible? (y/n): "
-    read -r VISIBLE
-    echo -n "API key: "
-
-    if [ "$VISIBLE" = "y" ] || [ "$VISIBLE" = "Y" ]; then
-        read -r API_KEY
-    else
-        read -rs API_KEY
-        echo ""
-    fi
-
-    if [ -z "$API_KEY" ]; then
-        echo -e "${RED}[FAIL] API key cannot be empty${NC}"
-        exit 1
-    fi
-
-    echo -e "${GREEN}[OK] API key saved${NC}"
+    echo -n "Enter API key for $SELECTED_PROVIDER: "
+    read -rs API_KEY; echo ""
+    [ -z "$API_KEY" ] && { echo -e "${RED}[FAIL]${NC}"; exit 1; }
 fi
-echo ""
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 5. Fetch models and select for each tier
-# ═══════════════════════════════════════════════════════════════════════════════
-
-echo -e "${BLUE}Fetching models for $SELECTED_PROVIDER...${NC}"
-
+# Models
+echo -e "\n${BLUE}[3/4] Fetching models...${NC}"
 MODELS=$(jq -r ".\"$SELECTED_PROVIDER\".models | keys[]" "$TEMP_API" | sort)
-
-if [ -z "$MODELS" ]; then
-    echo -e "${RED}[FAIL] No models found for $SELECTED_PROVIDER${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}[OK] Models fetched${NC}\n"
-
-# Convert to array
+[ -z "$MODELS" ] && { echo -e "${RED}[FAIL]${NC}"; exit 1; }
 MODEL_ARRAY=($MODELS)
 MODEL_COUNT=${#MODEL_ARRAY[@]}
-
-echo -e "${BLUE}Available models (${MODEL_COUNT} total):${NC}\n"
+echo -e "${GREEN}[OK] $MODEL_COUNT models${NC}\n"
 
 select_model() {
     local tier=$1
-    local MODEL_CHOICE
-    local MODEL_NUM
-    local CUSTOM_MODEL
-    
-    echo -e "${BLUE}Select model for $tier tier:${NC}" >&2
-    echo "0. [SAME_AS_DEFAULT]" >&2
-    echo "1. [CUSTOM_MODEL]" >&2
-    
-    # Show first 10 models, then option to see more
+    echo -e "${BLUE}Model for $tier:${NC}" >&2
+    echo "0. [SAME_AS_DEFAULT]" >&2; echo "1. [CUSTOM_MODEL]" >&2
     local count=0
-    for i in "${!MODEL_ARRAY[@]}"; do
-        if [ "$count" -lt 10 ]; then
-            echo "$((i+2)). ${MODEL_ARRAY[$i]}" >&2
-            ((count++))
-        else
-            break
-        fi
-    done
-    echo "... and $((MODEL_COUNT - 10)) more models" >&2
-    echo "" >&2
-    
-    if command -v fzy &> /dev/null && [ -t 0 ]; then
-        echo "Or search:" >&2
-        MODEL_CHOICE=$(printf "[SAME_AS_DEFAULT]\n[CUSTOM_MODEL]\n%s\n" "$MODELS" | fzy --prompt "Search $tier model: ")
+    for i in "${!MODEL_ARRAY[@]}"; do [ "$count" -ge 10 ] && break; echo "$((i+2)). ${MODEL_ARRAY[$i]}" >&2; ((count++)); done
+    [ "$MODEL_COUNT" -gt 10 ] && echo "... and $((MODEL_COUNT-10)) more" >&2
+    if command -v fzy &>/dev/null && [ -t 0 ]; then
+        choice=$(printf "[SAME_AS_DEFAULT]\n[CUSTOM_MODEL]\n%s\n" "$MODELS" | fzy --prompt "Search $tier: ")
     else
-        echo -n "Enter selection number (0-$((MODEL_COUNT+1))): " >&2
-        read -r MODEL_NUM
-        if [ "$MODEL_NUM" = "0" ]; then
-            MODEL_CHOICE="[SAME_AS_DEFAULT]"
-        elif [ "$MODEL_NUM" = "1" ]; then
-            MODEL_CHOICE="[CUSTOM_MODEL]"
-        elif [ "$MODEL_NUM" -ge 2 ] && [ "$MODEL_NUM" -lt $((MODEL_COUNT + 2)) ]; then
-            MODEL_CHOICE="${MODEL_ARRAY[$((MODEL_NUM-2))]}"
-        else
-            echo -e "${RED}[FAIL] Invalid selection${NC}" >&2
-            select_model "$tier"
-            return
-        fi
+        echo -n "Number (0-$((MODEL_COUNT+1))): " >&2; read -r n
+        case "$n" in 0) choice="[SAME_AS_DEFAULT]";; 1) choice="[CUSTOM_MODEL]";; *) [ "$n" -ge 2 ] && [ "$n" -lt $((MODEL_COUNT+2)) ] && choice="${MODEL_ARRAY[$((n-2))]}" || { echo -e "${RED}Invalid${NC}" >&2; select_model "$tier"; return; };; esac
     fi
-    
-    if [ "$MODEL_CHOICE" = "[CUSTOM_MODEL]" ]; then
-        echo -n "Enter custom model name: " >&2
-        read -r CUSTOM_MODEL
-        echo "$CUSTOM_MODEL"
-    elif [ "$MODEL_CHOICE" = "[SAME_AS_DEFAULT]" ]; then
-        echo "[SAME_AS_DEFAULT]"
-    else
-        echo "$MODEL_CHOICE"
-    fi
+    [ "$choice" = "[CUSTOM_MODEL]" ] && echo -n "Custom name: " >&2 && read -r choice
+    echo "$choice"
 }
 
 MODEL_DEFAULT=$(select_model "DEFAULT")
 MODEL_OPUS=$(select_model "OPUS")
 MODEL_SONNET=$(select_model "SONNET")
 MODEL_HAIKU=$(select_model "HAIKU")
+echo -e "${GREEN}[OK]${NC}\n"
 
-echo -e "${GREEN}[OK] Models selected${NC}\n"
+# ── 4. Save ───────────────────────────────────────────────────────────────────
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 6. Save configuration
-# ═══════════════════════════════════════════════════════════════════════════════
+echo -e "${BLUE}[4/4] Saving...${NC}"
 
-echo -e "${BLUE}Saving configuration...${NC}"
-
-# Create config.json
 cat > "$CONFIG_FILE" <<EOF
 {
   "provider": "$SELECTED_PROVIDER",
@@ -320,7 +133,6 @@ cat > "$CONFIG_FILE" <<EOF
 }
 EOF
 
-# Create/append to .env in project folder
 if [ ! -f "$ENV_FILE" ]; then
     cat > "$ENV_FILE" <<EOF
 # claudefree credentials
@@ -328,65 +140,55 @@ ${PROVIDER_UPPER}_API_KEY="$API_KEY"
 ANTHROPIC_AUTH_TOKEN="God"
 EOF
 else
-    # Append if not already present
-    if ! grep -q "^${PROVIDER_UPPER}_API_KEY=" "$ENV_FILE"; then
-        echo "${PROVIDER_UPPER}_API_KEY=\"$API_KEY\"" >> "$ENV_FILE"
-    fi
+    grep -q "^${PROVIDER_UPPER}_API_KEY=" "$ENV_FILE" || echo "${PROVIDER_UPPER}_API_KEY=\"$API_KEY\"" >> "$ENV_FILE"
+    grep -q "^ANTHROPIC_AUTH_TOKEN=" "$ENV_FILE" || echo 'ANTHROPIC_AUTH_TOKEN="God"' >> "$ENV_FILE"
 fi
-
 chmod 600 "$ENV_FILE"
 
-# Ensure .gitignore includes .env
-if [ -f "$SCRIPT_DIR/.gitignore" ]; then
-    if ! grep -q "^\.env$" "$SCRIPT_DIR/.gitignore"; then
-        echo ".env" >> "$SCRIPT_DIR/.gitignore"
-        echo -e "${YELLOW}[INFO]  Added .env to .gitignore${NC}"
-    fi
-else
-    echo ".env" > "$SCRIPT_DIR/.gitignore"
-    echo -e "${YELLOW}[INFO]  Created .gitignore with .env${NC}"
-fi
-
-echo -e "${GREEN}[OK] Configuration saved${NC}"
-echo -e "   Config: ${BLUE}$CONFIG_FILE${NC}"
-echo -e "   Credentials: ${BLUE}$ENV_FILE${NC}"
-echo -e "   ${YELLOW}[WARN]  Make sure .env is in .gitignore!${NC}\n"
-
-# Clean up
 rm -f "$TEMP_API"
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 7. Install claude-start-server to PATH
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── Shell env vars (only if NOT already configured) ───────────────────────────
 
-echo -e "${BLUE}[7/7] Installing claude-start-server to PATH...${NC}"
+if [ "$ALREADY_CONFIGURED" == "0" ] && [ -n "$SHELL_CONFIG" ]; then
+    echo ""
+    echo -e "${BLUE}Setting up ANTHROPIC env vars in $SHELL_CONFIG...${NC}"
+    [ -f "$SHELL_CONFIG" ] && cp "$SHELL_CONFIG" "$SHELL_CONFIG.backup"
+    cat >> "$SHELL_CONFIG" << 'EOF'
 
-LOCAL_BIN="$HOME/.local/bin"
-mkdir -p "$LOCAL_BIN"
+# claudefree Configuration
+export ANTHROPIC_AUTH_TOKEN="God"
+export ANTHROPIC_BASE_URL="http://localhost:16324"
+EOF
+    echo -e "${GREEN}[OK] Added to $SHELL_CONFIG${NC}"
+    echo -e "${YELLOW}Run: source $SHELL_CONFIG   (or restart terminal)${NC}"
 
-CLI_SCRIPT="$SCRIPT_DIR/claude-start-server"
-if [ -f "$CLI_SCRIPT" ]; then
-    ln -sf "$CLI_SCRIPT" "$LOCAL_BIN/claude-start-server" 2>/dev/null || {
-        cp "$CLI_SCRIPT" "$LOCAL_BIN/claude-start-server" 2>/dev/null
-    }
-    echo -e "${GREEN}[OK] Installed to $LOCAL_BIN/claude-start-server${NC}"
+    if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+        export ANTHROPIC_AUTH_TOKEN="God"
+        export ANTHROPIC_BASE_URL="http://localhost:16324"
+        echo -e "${GREEN}[OK] Exported to current shell${NC}"
+    fi
 else
-    echo -e "${YELLOW}[WARN] claude-start-server script not found at $CLI_SCRIPT${NC}"
+    echo -e "${GREEN}[OK] Shell env already configured, skipping${NC}"
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# 8. Success message
-# ═══════════════════════════════════════════════════════════════════════════════
+# ── Install claude-start-server to PATH ────────────────────────────────────────
 
+echo ""
+echo -e "${BLUE}Installing claude-start-server to PATH...${NC}"
+mkdir -p "$HOME/.local/bin"
+if [ -f "$SCRIPT_DIR/claude-start-server" ]; then
+    ln -sf "$SCRIPT_DIR/claude-start-server" "$HOME/.local/bin/claude-start-server" 2>/dev/null || cp "$SCRIPT_DIR/claude-start-server" "$HOME/.local/bin/claude-start-server"
+    echo -e "${GREEN}[OK] ~/.local/bin/claude-start-server${NC}"
+fi
+
+echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}[OK] Setup Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}\n"
 
 echo -e "${BLUE}Next steps:${NC}"
-echo -e "1. Start the proxy server:"
-echo -e "   ${YELLOW}claude-start-server${NC}"
+echo -e "  1. Start proxy:  ${YELLOW}claude-start-server${NC}"
+echo -e "  2. Run claude:    ${YELLOW}claude${NC}"
 echo -e ""
-echo -e "2. In another terminal, connect claude client:"
-echo -e "   ${YELLOW}ANTHROPIC_AUTH_TOKEN="God" ANTHROPIC_BASE_URL="http://localhost:16324" claude${NC}"
-echo -e ""
-echo -e "Configuration stored in: ${BLUE}$SCRIPT_DIR${NC}\n"
+echo -e "  Config:  ${BLUE}$CONFIG_FILE${NC}"
+echo -e "  Secrets: ${BLUE}$ENV_FILE${NC}\n"

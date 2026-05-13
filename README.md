@@ -1,112 +1,101 @@
 # claudefree: Universal Provider Proxy
 
-Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — using 
+Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — fetched from [models.dev](https://github.com/anomalyco/models.dev.git).
 
 ## Quick Start
 
-### 1. Initial Setup (One-time)
+### 1. Setup
 
-**Step 1A:** Configure backend models:
+**Linux / macOS:**
 ```bash
 ./setup.sh
 ```
 
-This fetches the latest providers and models from [models.dev](https://github.com/anomalyco/models.dev.git), then guides you through:
-- Selecting a backend provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
-- Picking models for each tier (default/opus/sonnet/haiku)
-- Entering API keys
-
-**Step 1B:** Configure environment variables:
-
-**Linux/macOS:**
-```bash
-bash setup-env.sh
-```
-
 **Windows:**
 ```cmd
-setup-env.bat
+setup.cmd
 ```
 
-This sets:
-```
-ANTHROPIC_AUTH_TOKEN=God
-ANTHROPIC_BASE_URL=http://localhost:16324
-```
-
-See [SETUP_ENV.md](SETUP_ENV.md) for detailed instructions.
+This guides you through:
+- Selecting a provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
+- Picking models for each tier (default/opus/sonnet/haiku)
+- Entering API keys
+- Setting `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` env vars (first run only)
 
 ### 2. Start Server
 
-**Option A: Using claude-start-server (Recommended - After setup.sh)**
 ```bash
 claude-start-server
 ```
-Automatically starts the ClaudeFree server on port 16324 using your configured backend.
 
-**Option B: Using uv/uvicorn directly**
+Or directly with uvicorn:
 ```bash
 uv run uvicorn server:app --host 0.0.0.0 --port 16324
 ```
 
-**Option D: Using Python directly**
-```bash
-python server.py
-```
-
-### 3. Connect Claude Client
-
-After running setup-env.sh or setup-env.bat, simply:
+### 3. Connect Claude
 
 ```bash
 claude
 ```
 
-Or manually (without setup):
+Or manually:
 ```bash
 ANTHROPIC_AUTH_TOKEN="God" ANTHROPIC_BASE_URL="http://localhost:16324" claude
 ```
 
 ### 4. Network Exposure (Optional)
 
-To expose the server on your local network IP for remote access:
-
 ```bash
 python serverip.py
 ```
-
-This displays:
-- Local connection URL (localhost:16324)
-- Network IP address for same-LAN access
-- Hostname connection options
-- Instructions for firewall configuration
 
 ---
 
 ## Configuration
 
 ### Backend Selection
-Edit `.env` or config.json to choose backend:
-```bash
-DEFAULT_BACKEND_ID=open_router  # or nvidia_nim
-OPENROUTER_API_KEY=sk-...
+Edit `config.json` or re-run `setup.sh`/`setup.cmd` to change:
+```json
+{
+  "provider": "open_router",
+  "model_default": "...",
+  "model_opus": "...",
+  "model_sonnet": "...",
+  "model_haiku": "..."
+}
 ```
 
 ### Supported Backends
 - OpenRouter (native Anthropic protocol)
 - NVIDIA NIM (OpenAI-compatible)
 - OpenCode (dynamic multi-transport)
+- Any provider from [models.dev](https://github.com/anomalyco/models.dev.git)
 
 ### Environment Variables
 
-| Variable | Default | Required |
-|----------|---------|----------|
-| ANTHROPIC_AUTH_TOKEN | God | No |
-| ANTHROPIC_BASE_URL | http://localhost:16324 | No |
-| OPENROUTER_API_KEY | - | Yes (for OpenRouter) |
-| NVIDIA_NIM_API_KEY | - | Yes (for NVIDIA NIM) |
-| PORT | 16324 | No |
-| HOST | 0.0.0.0 | No |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_AUTH_TOKEN` | God | Auth token for Claude client |
+| `ANTHROPIC_BASE_URL` | http://localhost:16324 | Proxy URL for Claude |
+| `{PROVIDER}_API_KEY` | - | Your provider API key |
+| `PORT` | 16324 | Server port |
+| `HOST` | 0.0.0.0 | Bind address |
+
+---
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `setup.sh` | Full setup for Linux/macOS |
+| `setup.cmd` | Full setup for Windows |
+| `claude-start-server` | Start script (bash) |
+| `claude-start-server.bat` | Start script (Windows) |
+| `config.json` | Provider and model configuration |
+| `.env` | API keys and secrets |
+| `serverip.py` | Network IP exposure utility |
+| `Arch.md` | Architecture documentation |
 
 ---
 
@@ -119,69 +108,10 @@ ClaudeFree routes requests through:
 4. External API (provider endpoint)
 5. SSE Response (Anthropic format back to client)
 
-See [Arch.md](Arch.md) for detailed architecture.
-
----
-
 ## Development
 
-### Install Dependencies
 ```bash
-uv sync
+uv sync              # Install dependencies
+pytest tests/        # Run tests
+claude-start-server  # Start with logging
 ```
-
-### Run Tests
-```bash
-pytest tests/
-```
-
-### Run with Logging
-```bash
-uv run uvicorn server:app --host 0.0.0.0 --port 16324 --log-level debug
-```
-
-### Test Providers
-```bash
-python -m cli.test_providers
-```
-
----
-
-## Environment Setup
-
-For persistent environment configuration across sessions:
-
-- **Linux/macOS:** See [SETUP_ENV.md](SETUP_ENV.md)
-- **Windows:** See [SETUP_ENV.md](SETUP_ENV.md)
-
-This allows you to run `claude` directly without typing environment variables.
-
----
-
-## Troubleshooting
-
-### Gateway not starting?
-- Check port 16324 is available
-- Verify Python 3.11+
-- Check .env file exists
-
-### Authentication fails?
-- Verify ANTHROPIC_AUTH_TOKEN environment variable is set
-- Check OPENROUTER_API_KEY or NVIDIA_NIM_API_KEY
-
-### Model routing issues?
-- Check DEFAULT_BACKEND_ID is valid
-- Verify backend API keys in .env
-
-See [Arch.md](Arch.md) for request flow debugging.
-
----
-
-## Files
-
-- `setup.sh` - Backend configuration
-- `setup-env.sh` - Linux/macOS environment setup
-- `setup-env.bat` - Windows environment setup
-- `serverip.py` - Network IP exposure and connection info
-- `Arch.md` - Architecture documentation
-- `SETUP_ENV.md` - Environment setup guide

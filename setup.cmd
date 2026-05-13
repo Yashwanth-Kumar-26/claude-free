@@ -22,27 +22,29 @@ if exist ".env" (
     if not errorlevel 1 set "ALREADY_CONFIGURED=1"
 )
 
-REM --- Check/Install fzf (Windows-compatible fuzzy finder) ---
+REM --- Install fzf (Windows-supported fuzzy finder) ---
 set "FZF_AVAILABLE=0"
 where fzf.exe >nul 2>&1 && set "FZF_AVAILABLE=1"
-if "%FZF_AVAILABLE%"=="0" where fzf >nul 2>&1 && set "FZF_AVAILABLE=1"
 if "%FZF_AVAILABLE%"=="0" (
-    where scoop >nul 2>&1
-    if errorlevel 1 (
-        echo [INFO] Installing scoop (requires PowerShell^)...
-        powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" >nul 2>&1
-        powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh'))" >nul 2>&1
-        if errorlevel 1 (
-            echo [WARN] Failed to install scoop automatically.
-        )
+    where winget >nul 2>&1 && (
+        echo [INFO] Installing fzf via winget...
+        winget install fzf >nul 2>&1 && set "FZF_AVAILABLE=1"
     )
+)
+if "%FZF_AVAILABLE%"=="0" (
     where scoop >nul 2>&1 && (
         echo [INFO] Installing fzf via scoop...
         scoop install fzf >nul 2>&1 && set "FZF_AVAILABLE=1"
     )
 )
 if "%FZF_AVAILABLE%"=="0" (
-    echo [WARN] Could not install fzf. Install manually: scoop install fzf
+    where choco >nul 2>&1 && (
+        echo [INFO] Installing fzf via Chocolatey...
+        choco install fzf -y >nul 2>&1 && set "FZF_AVAILABLE=1"
+    )
+)
+if "%FZF_AVAILABLE%"=="0" (
+    echo [WARN] Could not install fzf. Install manually: winget install fzf
     echo        Falling back to numbered menu.
 )
 echo.
@@ -82,7 +84,7 @@ if "%FZF_AVAILABLE%"=="1" goto fzf_provider
 goto menu_provider
 
 :fzf_provider
-echo (Type to filter, Enter to select)
+echo (Type to filter, Enter to select^)
 %PS% -NoProfile -Command "$data = Get-Content '%TEMP%\cf_providers.txt' -Raw; $data -split '\|' | fzf" > "%TEMP%\cf_selected.txt"
 set /p SELECTED_PROVIDER=<"%TEMP%\cf_selected.txt"
 if "%SELECTED_PROVIDER%"=="" (

@@ -30,7 +30,7 @@ if !errorlevel! equ 0 (
 
     if "!EXISTING_TOKEN!"=="God" (
         echo.
-        echo ✓ Already configured!
+        echo [OK] Already configured!
         echo.
         echo Current Configuration:
         echo   ANTHROPIC_AUTH_TOKEN = %ANTHROPIC_AUTH_TOKEN%
@@ -47,7 +47,7 @@ echo.
 REM Set environment variables for current user
 setx ANTHROPIC_AUTH_TOKEN "God" >nul
 if %errorlevel% equ 0 (
-    echo ✓ Set: ANTHROPIC_AUTH_TOKEN = God
+    echo [OK] Set: ANTHROPIC_AUTH_TOKEN = God
 ) else (
     echo ✗ Failed to set ANTHROPIC_AUTH_TOKEN
     pause
@@ -56,7 +56,7 @@ if %errorlevel% equ 0 (
 
 setx ANTHROPIC_BASE_URL "http://localhost:16324" >nul
 if %errorlevel% equ 0 (
-    echo ✓ Set: ANTHROPIC_BASE_URL = http://localhost:16324
+    echo [OK] Set: ANTHROPIC_BASE_URL = http://localhost:16324
 ) else (
     echo ✗ Failed to set ANTHROPIC_BASE_URL
     pause
@@ -65,7 +65,7 @@ if %errorlevel% equ 0 (
 
 echo.
 echo ===============================================================
-echo   ✓ Setup Complete!
+echo   [OK] Setup Complete!
 echo ===============================================================
 echo.
 

@@ -40,7 +40,7 @@ async def _lifespan(app: FastAPI):
     svc = GatewayService(cfg, hub, selector, shortcuts)
     app.state.service = svc
 
-    logger.success("claudefree ready ✓")
+    logger.success("claudefree ready")
     yield
 
     # ── shutdown ──────────────────────────────────────────────────────────

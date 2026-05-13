@@ -220,7 +220,7 @@ async def root_ui(request: Request) -> str:
             <td>{stats["requests"]}</td>
             <td><span class="status-{status_class}">{stats["errors"]}</span></td>
             <td>{stats["avg_latency_ms"]}ms</td>
-            <td>{"✅" if stats["requests"] > 0 and stats["errors"] == 0 else "💤"}</td>
+            <td>{"healthy" if stats["requests"] > 0 and stats["errors"] == 0 else "idle"}</td>
         </tr>
         """
 

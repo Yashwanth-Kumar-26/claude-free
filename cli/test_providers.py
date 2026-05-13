@@ -43,7 +43,7 @@ async def check_backend(name, model_ref):
                 error_markers = ["error", "fail", "invalid", "unauthorized", "illegal header"]
 
                 if any(m in low_body for m in error_markers):
-                    print("❌ FAILED (Error in response body)")
+                    print("FAILED (Error in response body)")
                     # Try to extract the message
                     if "text_delta" in body_text:
                         import re
@@ -52,10 +52,10 @@ async def check_backend(name, model_ref):
                             print(f"   Message: {match.group(1)}")
                     return False
 
-                print("✅ WORKING")
+                print("WORKING")
                 return True
     except Exception as e:
-        print(f"❌ OFFLINE ({type(e).__name__})")
+        print(f"OFFLINE ({type(e).__name__})")
 
     return False
 

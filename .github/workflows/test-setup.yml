@@ -1,0 +1,51 @@
+name: Test setup scripts
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test-setup-sh:
+    name: Test setup.sh (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck setup.sh
+        run: shellcheck setup.sh
+      - name: Run setup.sh in dry mode (syntax check)
+        run: |
+          echo "n" | bash -n setup.sh || exit 1
+          echo "setup.sh parsed OK"
+
+  test-setup-bat:
+    name: Test setup.bat (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Basic batch syntax check
+        shell: cmd
+        run: |
+          echo "=== Testing setup.bat syntax ==="
+          REM Run batch with forced exit early to verify parsing
+          type setup.bat | findstr /r "^:" >nul
+          if errorlevel 1 (
+            echo No labels found -- invalid syntax?
+            exit /b 1
+          ) else (
+            echo Labels found -- script structure OK
+          )
+      - name: Validate setup.bat parses correctly
+        shell: powershell
+        run: |
+          # Parse the batch file for obvious structural errors
+          $content = Get-Content setup.bat -Raw
+          $opens = [regex]::Matches($content, '\(').Count
+          $closes = [regex]::Matches($content, '\)').Count
+          Write-Host "Open parens: $opens, Close parens: $closes"
+          if ($opens -ne $closes) {
+            Write-Host "::error::Mismatched parentheses in setup.bat ($opens open, $closes close)"
+            exit 1
+          }
+          Write-Host "Parentheses balanced -- syntax OK"

@@ -14,7 +14,7 @@ elif [[ "$SHELL" == *"bash"* ]]; then
     SHELL_CONFIG="$HOME/.bash_profile"
     SHELL_NAME="bash"
 else
-    echo "❌ Unknown shell: $SHELL"
+    echo "[FAIL] Unknown shell: $SHELL"
     echo "Please manually add these lines to your shell config:"
     echo ""
     echo "export ANTHROPIC_AUTH_TOKEN=\"God\""
@@ -35,7 +35,7 @@ echo -e "${BLUE}═════════════════════�
 
 # Check if already configured
 if grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$SHELL_CONFIG" 2>/dev/null; then
-    echo -e "${GREEN}✅ Already configured!${NC}"
+    echo -e "${GREEN}[OK] Already configured!${NC}"
     echo -e "Environment variables found in: ${BLUE}$SHELL_CONFIG${NC}\n"
     source "$SHELL_CONFIG"
     echo -e "${GREEN}Current configuration:${NC}"
@@ -47,7 +47,7 @@ fi
 # Create backup
 if [ -f "$SHELL_CONFIG" ]; then
     cp "$SHELL_CONFIG" "$SHELL_CONFIG.backup"
-    echo -e "${YELLOW}📋 Backup created: $SHELL_CONFIG.backup${NC}\n"
+    echo -e "${YELLOW}[CLIPBOARD] Backup created: $SHELL_CONFIG.backup${NC}\n"
 fi
 
 # Add configuration
@@ -60,7 +60,7 @@ export ANTHROPIC_AUTH_TOKEN="God"
 export ANTHROPIC_BASE_URL="http://localhost:16324"
 EOF
 
-echo -e "${GREEN}✅ Configuration added!${NC}\n"
+echo -e "${GREEN}[OK] Configuration added!${NC}\n"
 
 # Source the config
 source "$SHELL_CONFIG"
@@ -73,7 +73,7 @@ echo -e "  ANTHROPIC_AUTH_TOKEN:   ${YELLOW}$ANTHROPIC_AUTH_TOKEN${NC}"
 echo -e "  ANTHROPIC_BASE_URL:     ${YELLOW}$ANTHROPIC_BASE_URL${NC}\n"
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✅ Setup Complete!${NC}"
+echo -e "${GREEN}[OK] Setup Complete!${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}\n"
 
 echo -e "${YELLOW}Next Steps:${NC}"

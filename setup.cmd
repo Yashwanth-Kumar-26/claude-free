@@ -22,14 +22,14 @@ if exist ".env" (
     if not errorlevel 1 set "ALREADY_CONFIGURED=1"
 )
 
-REM --- Check/Install fzy via scoop ---
-set "FZY_AVAILABLE=0"
-where fzy.exe >nul 2>&1 && set "FZY_AVAILABLE=1"
-if "%FZY_AVAILABLE%"=="0" where fzy >nul 2>&1 && set "FZY_AVAILABLE=1"
-if "%FZY_AVAILABLE%"=="0" (
+REM --- Check/Install fzf (Windows-compatible fuzzy finder) ---
+set "FZF_AVAILABLE=0"
+where fzf.exe >nul 2>&1 && set "FZF_AVAILABLE=1"
+if "%FZF_AVAILABLE%"=="0" where fzf >nul 2>&1 && set "FZF_AVAILABLE=1"
+if "%FZF_AVAILABLE%"=="0" (
     where scoop >nul 2>&1
     if errorlevel 1 (
-        echo [INFO] scoop not found. Installing scoop (requires PowerShell^)...
+        echo [INFO] Installing scoop (requires PowerShell^)...
         powershell -Command "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" >nul 2>&1
         powershell -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://get.scoop.sh'))" >nul 2>&1
         if errorlevel 1 (
@@ -37,12 +37,12 @@ if "%FZY_AVAILABLE%"=="0" (
         )
     )
     where scoop >nul 2>&1 && (
-        echo [INFO] Installing fzy via scoop...
-        scoop install fzy >nul 2>&1 && set "FZY_AVAILABLE=1"
+        echo [INFO] Installing fzf via scoop...
+        scoop install fzf >nul 2>&1 && set "FZF_AVAILABLE=1"
     )
 )
-if "%FZY_AVAILABLE%"=="0" (
-    echo [WARN] Could not install fzy. Install manually: scoop install fzy
+if "%FZF_AVAILABLE%"=="0" (
+    echo [WARN] Could not install fzf. Install manually: scoop install fzf
     echo        Falling back to numbered menu.
 )
 echo.
@@ -78,12 +78,12 @@ set /p ALL_PROVIDERS=<"%TEMP%\cf_providers.txt"
 
 echo [2/4] Select a provider:
 echo.
-if "%FZY_AVAILABLE%"=="1" goto fzy_provider
+if "%FZF_AVAILABLE%"=="1" goto fzf_provider
 goto menu_provider
 
-:fzy_provider
+:fzf_provider
 echo (Type to filter, Enter to select)
-%PS% -NoProfile -Command "$data = Get-Content '%TEMP%\cf_providers.txt' -Raw; $data -split '\|' | fzy" > "%TEMP%\cf_selected.txt"
+%PS% -NoProfile -Command "$data = Get-Content '%TEMP%\cf_providers.txt' -Raw; $data -split '\|' | fzf" > "%TEMP%\cf_selected.txt"
 set /p SELECTED_PROVIDER=<"%TEMP%\cf_selected.txt"
 if "%SELECTED_PROVIDER%"=="" (
     echo [ERROR] No provider selected
@@ -256,10 +256,10 @@ REM ─────────────────────────�
 set "TIER=%~1"
 echo.
 echo === Select model for %TIER% tier ===
-if "%FZY_AVAILABLE%"=="1" goto fzy_model_%TIER%
+if "%FZF_AVAILABLE%"=="1" goto fzf_model_%TIER%
 goto menu_model_%TIER%
 
-:fzy_model_%TIER%
+:fzf_model_%TIER%
 echo (Type to filter, Enter to select)
 (
   echo [SAME_AS_DEFAULT]
@@ -267,7 +267,7 @@ echo (Type to filter, Enter to select)
   %ALL_MODELS:|=^
   echo %
 ) > "%TEMP%\cf_model_list_%TIER%.txt"
-type "%TEMP%\cf_model_list_%TIER%.txt" | fzy > "%TEMP%\cf_model_sel_%TIER%.txt"
+type "%TEMP%\cf_model_list_%TIER%.txt" | fzf > "%TEMP%\cf_model_sel_%TIER%.txt"
 set /p MODEL_RESULT=<"%TEMP%\cf_model_sel_%TIER%.txt"
 if "%MODEL_RESULT%"=="[CUSTOM_MODEL]" (
     set /p "MODEL_RESULT=Enter custom model name: "

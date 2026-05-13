@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claudefree"
+version = "3.0.0"
+description = "Anthropic-compatible gateway routing Claude Code to LLM backends — including OpenCode"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.10.0",
+    "fastapi[standard]>=0.115.0",
+    "httpx[socks]>=0.27.0",
+    "loguru>=0.7.0",
+    "markdown-it-py>=3.0.0",
+    "openai>=1.55.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.0",
+    "tiktoken>=0.8.0",
+    "uvicorn>=0.32.0",
+]
+
+[project.scripts]
+claudefree = "cli.entrypoints:serve"
+cf-init = "cli.entrypoints:init"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "SIM", "PERF", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

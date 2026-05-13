@@ -181,6 +181,26 @@ if [ -f "$SCRIPT_DIR/claude-start-server" ]; then
     echo -e "${GREEN}[OK] ~/.local/bin/claude-start-server${NC}"
 fi
 
+# ── Install claude-code CLI (if missing) ─────────────────────────
+
+echo ""
+echo -e "${BLUE}Checking claude CLI...${NC}"
+if command -v claude &> /dev/null; then
+    echo -e "${GREEN}[OK] claude found${NC}"
+else
+    echo -e "${YELLOW}claude not found — installing via npm...${NC}"
+    if command -v npm &> /dev/null; then
+        npm install -g @anthropic-ai/claude-code
+        if command -v claude &> /dev/null; then
+            echo -e "${GREEN}[OK] claude installed${NC}"
+        else
+            echo -e "${RED}[FAIL] npm install failed${NC}"
+        fi
+    else
+        echo -e "${RED}[FAIL] npm not found. Install Node.js first: https://nodejs.org${NC}"
+    fi
+fi
+
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}[OK] Setup Complete!${NC}"

@@ -81,7 +81,7 @@ echo.
 REM ────────────────────────────────────────────────────────────
 REM Step 2: Select provider
 REM ────────────────────────────────────────────────────────────
-%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.PSObject.Properties.Name | Sort-Object) -join '|'" > "%TEMP%\cf_providers.txt"
+%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.PSObject.Properties.Name | Sort-Object)" > "%TEMP%\cf_providers.txt"
 set /p ALL_PROVIDERS=<"%TEMP%\cf_providers.txt"
 
 echo [2/4] Select a provider:
@@ -91,7 +91,7 @@ goto menu_provider
 
 :fzf_provider
 echo (Type to filter, Enter to select^)
-%PS% -NoProfile -Command "$data = Get-Content '%TEMP%\cf_providers.txt' -Raw; $data -split '\|' | fzf" > "%TEMP%\cf_selected.txt"
+%PS% -NoProfile -Command "Get-Content '%TEMP%\cf_providers.txt' | fzf" > "%TEMP%\cf_selected.txt"
 set /p SELECTED_PROVIDER=<"%TEMP%\cf_selected.txt"
 if "%SELECTED_PROVIDER%"=="" (
     echo [ERROR] No provider selected
@@ -103,12 +103,12 @@ goto provider_done
 
 :menu_provider
 set "idx=0"
-for %%P in ("%ALL_PROVIDERS:|= "%") do (
+for /f "usebackq delims=" %%P in ("%TEMP%\cf_providers.txt") do (
     set /a idx+=1
-    set "PROVIDER_!idx!=%%~P"
-    echo   !idx!. %%~P
+    set "PROVIDER_!idx!=%%P"
+    echo   !idx!. %%P
 )
-set "PROVIDER_COUNT=%idx%"
+set "PROVIDER_COUNT=!idx!"
 echo.
 :choose_provider
 set /p "PROVIDER_NUM=Enter provider number (1-%PROVIDER_COUNT%): "
@@ -141,7 +141,7 @@ if not "%API_KEY%"=="" (
     echo [OK] API key found in .env
 ) else (
     set /p "API_KEY=Enter API key: "
-    if "%API_KEY%"=="" (
+    if "!API_KEY!"=="" (
         echo [ERROR] API key cannot be empty
         pause
         exit /b 1
@@ -154,10 +154,10 @@ REM Step 4: Select models
 REM ────────────────────────────────────────────────────────────
 echo [4/4] Fetching models for %SELECTED_PROVIDER%...
 echo.
-%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.%SELECTED_PROVIDER%.models.PSObject.Properties.Name | Sort-Order) -join '|'" > "%TEMP%\cf_models.txt"
-set /p ALL_MODELS=<"%TEMP%\cf_models.txt"
+%PS% -NoProfile -Command "$j = Get-Content '%TEMP_API%' | ConvertFrom-Json; ($j.%SELECTED_PROVIDER%.models.PSObject.Properties.Name | Sort-Object)" > "%TEMP%\cf_models.txt"
+for /f "usebackq delims=" %%M in ("%TEMP%\cf_models.txt") do set "MODEL_CHECK=%%M"
 
-if "%ALL_MODELS%"=="" (
+if "!MODEL_CHECK!"=="" (
     echo [ERROR] No models found
     del "%TEMP_API%" "%TEMP%\cf_*.txt" 2>nul
     pause
@@ -167,11 +167,11 @@ echo [OK] Models fetched
 echo.
 
 set "idx=0"
-for %%M in ("%ALL_MODELS:|= "%") do (
+for /f "usebackq delims=" %%M in ("%TEMP%\cf_models.txt") do (
     set /a idx+=1
-    set "MODEL_!idx!=%%~M"
+    set "MODEL_!idx!=%%M"
 )
-set "MODEL_COUNT=%idx%"
+set "MODEL_COUNT=!idx!"
 
 call :select_model DEFAULT
 set "MODEL_DEFAULT=%MODEL_RESULT%"
@@ -232,11 +232,40 @@ REM Step 7: Install claude-start-server to PATH
 REM ────────────────────────────────────────────────────────────
 if exist "%SCRIPT_DIR%claude-start-server.bat" (
     mkdir "%USERPROFILE%\.local\bin" 2>nul
-    copy /y "%SCRIPT_DIR%claude-start-server.bat" "%USERPROFILE%\.local\bin\" >nul 2>&1
+    > "%USERPROFILE%\.local\bin\claude-start-server.bat" (
+        echo @echo off
+        echo setlocal
+        echo set "DIR=%SCRIPT_DIR:~0,-1%"
+        echo uv run --directory "%%DIR%%" python -m cli.entrypoints %%*
+    )
     if not errorlevel 1 (
         echo [OK] Installed to %%USERPROFILE%%\.local\bin
     ) else (
         echo [INFO] Add %SCRIPT_DIR% to your PATH
+    )
+)
+
+REM ────────────────────────────────────────────────────────────
+REM Step 8: Install claude-code CLI (if missing)
+REM ────────────────────────────────────────────────────────────
+echo.
+echo Checking claude CLI...
+where claude >nul 2>&1
+if not errorlevel 1 (
+    echo [OK] claude found
+) else (
+    echo [INFO] claude not found — installing via npm...
+    where npm >nul 2>&1
+    if not errorlevel 1 (
+        call npm install -g @anthropic-ai/claude-code
+        where claude >nul 2>&1
+        if not errorlevel 1 (
+            echo [OK] claude installed
+        ) else (
+            echo [ERROR] npm install failed
+        )
+    ) else (
+        echo [ERROR] npm not found. Install Node.js first: https://nodejs.org
     )
 )
 
@@ -264,16 +293,15 @@ REM ─────────────────────────�
 set "TIER=%~1"
 echo.
 echo === Select model for %TIER% tier ===
-if "%FZF_AVAILABLE%"=="1" goto fzf_model_%TIER%
-goto menu_model_%TIER%
+if "%FZF_AVAILABLE%"=="1" goto fzf_select_model
+goto menu_select_model
 
-:fzf_model_%TIER%
+:fzf_select_model
 echo (Type to filter, Enter to select)
 (
   echo [SAME_AS_DEFAULT]
   echo [CUSTOM_MODEL]
-  %ALL_MODELS:|=^
-  echo %
+  type "%TEMP%\cf_models.txt"
 ) > "%TEMP%\cf_model_list_%TIER%.txt"
 type "%TEMP%\cf_model_list_%TIER%.txt" | fzf > "%TEMP%\cf_model_sel_%TIER%.txt"
 set /p MODEL_RESULT=<"%TEMP%\cf_model_sel_%TIER%.txt"
@@ -283,7 +311,7 @@ if "%MODEL_RESULT%"=="[CUSTOM_MODEL]" (
 del "%TEMP%\cf_model_list_%TIER%.txt" "%TEMP%\cf_model_sel_%TIER%.txt" 2>nul
 goto :eof
 
-:menu_model_%TIER%
+:menu_select_model
 echo   0. [SAME_AS_DEFAULT]
 echo   1. [CUSTOM_MODEL]
 for /l %%i in (2,1,%MODEL_COUNT%) do (
@@ -294,12 +322,12 @@ if %MODEL_COUNT% gtr 10 (
     echo   ... and !extra! more models
 )
 echo.
-:pick_model_%TIER%
+:pick_model
 set /p "M_NUM=Enter selection for %TIER% (0 or 1 or 2-%MODEL_COUNT%): "
-if "%M_NUM%"=="" goto pick_model_%TIER%
+if "%M_NUM%"=="" goto pick_model
 set /a "M_NUM=%M_NUM%" 2>nul
-if %M_NUM% lss 0 goto pick_model_%TIER%
-if %M_NUM% gtr %MODEL_COUNT% goto pick_model_%TIER%
+if %M_NUM% lss 0 goto pick_model
+if %M_NUM% gtr %MODEL_COUNT% goto pick_model
 if %M_NUM% equ 0 set "MODEL_RESULT=[SAME_AS_DEFAULT]"&goto :eof
 if %M_NUM% equ 1 (
     set /p "MODEL_RESULT=Enter custom model name: "

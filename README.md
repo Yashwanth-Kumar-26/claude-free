@@ -28,9 +28,9 @@ This guides you through:
 claude-start-server
 ```
 
-Or directly with uvicorn:
+Or directly with python:
 ```bash
-uv run uvicorn server:app --host 0.0.0.0 --port 16324
+python server.py
 ```
 
 ### 3. Connect Claude
@@ -38,12 +38,6 @@ uv run uvicorn server:app --host 0.0.0.0 --port 16324
 ```bash
 claude
 ```
-
-Or manually:
-```bash
-ANTHROPIC_AUTH_TOKEN="God" ANTHROPIC_BASE_URL="http://localhost:16324" claude
-```
-
 ### 4. Network Exposure (Optional)
 
 ```bash

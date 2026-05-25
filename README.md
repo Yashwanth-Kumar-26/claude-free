@@ -2,18 +2,23 @@
 
 Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — fetched from [models.dev](https://github.com/anomalyco/models.dev.git).
 
+
 ## Quick Start
 
 ### 1. Setup
 
 **Linux / macOS:**
 ```bash
+git clone https://github.com/Yashwanth-Kumar-26/claude-free
+cd claude-free
 ./setup.sh
 ```
 
 **Windows:**
 ```cmd
-setup.cmd
+git clone https://github.com/Yashwanth-Kumar-26/claude-free
+cd claude-free
+.\setup.cmd
 ```
 
 This guides you through:
@@ -44,6 +49,31 @@ claude
 python serverip.py
 ```
 
+---
+
+## Why claudefree?
+
+### The Problem
+Claude Code CLI is powerful, but it's bound to Anthropic's API. Using Claude with other providers (OpenRouter, NVIDIA NIM, Groq, Ollama, etc.) requires building custom routing logic — and most people build it wrong.
+
+### The Discovery
+While researching Claude Code integration, I found OpenRouter's [cookbook guide](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration) showing a simple pattern: **set a base URL and Claude routes to any Anthropic-compatible provider**. 
+
+But then I discovered something better: **[models.dev](https://github.com/anomalyco/models.dev)** — an open-source catalog of 115+ LLM providers and their capabilities, maintained by the community.
+
+### The Insight
+Instead of hardcoding backends one-by-one, why not leverage a dynamic provider registry? This single decision became claudefree's core: 
+- **Discover providers dynamically** (no code changes needed for new ones)
+- **Route intelligently** (select by cost, latency, capability)
+- **Eliminate vendor lock-in** (seamlessly swap providers)
+
+### What You Get
+A single proxy that speaks Anthropic-compatible API on one side, and can route to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud ,, and 107+ others on the other side.
+
+**One gateway. 115+ providers. Zero hardcoding.**
+
+
+>  **If you find claudefree useful, please give it a star ⭐ !** It helps the project grow and lets others discover it.
 ---
 
 ## Configuration

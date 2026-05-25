@@ -91,7 +91,7 @@ class AnthropicNativeAdapter(DynamicBackendAdapter):
             # Add any additional options
             request_body.update(kwargs)
 
-            logger.debug(f"Calling Anthropic API with model {self.model_id}")
+            logger.debug(f"Calling Anthropic API with model {request_body.get('model') or self.model_id}")
 
             # Call Anthropic API
             async with self.client.stream(

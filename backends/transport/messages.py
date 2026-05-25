@@ -142,8 +142,9 @@ class MessagesTransport(BackendAdapter):
             if line:
                 buf.append(line)
             elif buf:
+                # Join buffered lines and yield event (faster than clear())
                 yield "\n".join(buf) + "\n\n"
-                buf.clear()
+                buf = []  # Faster than buf.clear()
         if buf:
             yield "\n".join(buf) + "\n\n"
 
@@ -175,7 +176,8 @@ class MessagesTransport(BackendAdapter):
         thinking_on = self._thinking_enabled(request)
         body = self._build_body(request)
 
-        logger.info(
+        # Log at debug level to reduce I/O overhead in hot path
+        logger.debug(
             "{}_STREAM:{} native Anthropic model={} msgs={} tools={}",
             tag,
             rid,

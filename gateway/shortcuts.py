@@ -89,7 +89,8 @@ def maybe_quota_probe(req: MessagesRequest) -> Iterator[str] | None:
 
 _TITLE_PATTERN = re.compile(
     r"(?:generate|create|write|give me|suggest|provide)(?:\s+\w+){0,5}"
-    r"\s+(?:a\s+)?(?:short\s+)?(?:title|name|heading|label)\b",
+    r"\s+(?:a\s+)?(?:short\s+)?(?:title|heading|label)\b|"
+    r"(?:name\s+(?:this|the)\s+conversation|conversation\s+name)\b",
     re.IGNORECASE,
 )
 

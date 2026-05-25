@@ -142,9 +142,9 @@ class MessagesTransport(BackendAdapter):
             if line:
                 buf.append(line)
             elif buf:
-                # Pre-size join to avoid allocations
+                # Join buffered lines and yield event (faster than clear())
                 yield "\n".join(buf) + "\n\n"
-                buf = []  # Reset instead of clear() - faster
+                buf = []  # Faster than buf.clear()
         if buf:
             yield "\n".join(buf) + "\n\n"
 

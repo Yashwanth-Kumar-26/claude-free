@@ -115,12 +115,15 @@ def _build_opencode_go(settings: Settings) -> BackendAdapter:
     from backends.opencode.base_adapter import DynamicAdapterConfig
     from backends.defaults import OPENCODE_GO_BASE
 
+    # Extract model name without backend prefix (e.g., "claude-3-opus" from "opencode_go/claude-3-opus")
+    model_name = settings.model.split("/", 1)[1] if "/" in settings.model else settings.model
+
     config = DynamicAdapterConfig(
         provider_id="opencode_go",
         provider_name="OpenCode Go",
         api_url=OPENCODE_GO_BASE,
         api_key=settings.opencode_api_key,
-        model_id=settings.model,
+        model_id=model_name,  # Use unprefixed model name for upstream API
         proxy=settings.opencode_proxy,
     )
     return OpenAICompatibleAdapter(config)
@@ -131,12 +134,15 @@ def _build_opencode_zen(settings: Settings) -> BackendAdapter:
     from backends.opencode.base_adapter import DynamicAdapterConfig
     from backends.defaults import OPENCODE_ZEN_BASE
 
+    # Extract model name without backend prefix (e.g., "claude-3-opus" from "opencode_zen/claude-3-opus")
+    model_name = settings.model.split("/", 1)[1] if "/" in settings.model else settings.model
+
     config = DynamicAdapterConfig(
         provider_id="opencode_zen",
         provider_name="OpenCode Zen",
         api_url=OPENCODE_ZEN_BASE,
         api_key=settings.opencode_api_key,
-        model_id=settings.model,
+        model_id=model_name,  # Use unprefixed model name for upstream API
         proxy=settings.opencode_proxy,
     )
     return ResponsesAPIAdapter(config)
@@ -255,7 +261,9 @@ class BackendHub:
     def get(self, backend_id: str) -> BackendAdapter:
         """Get a backend adapter (hardcoded or dynamic).
 
-        Uses single-pass lookup with LRU reordering for fast path.
+        Uses single-pass lookup with LRU ordering for fast path.
+        Note: cache is bounded to prevent unbounded memory growth,
+        but cleanup happens asynchronously during shutdown only.
 
         Args:
             backend_id: Backend ID
@@ -279,12 +287,12 @@ class BackendHub:
             logger.info("BackendHub: instantiating adapter '{}'", backend_id)
             adapter = _FACTORIES[backend_id](self._settings)
             
-            # Maintain bounded cache (max 10 HTTP/2 pools)
+            # Keep bounded cache to prevent unbounded HTTP/2 pool growth
+            # Old adapters are cleaned up during shutdown, not inline
             if len(self._cache) >= 10:
                 oldest_id = next(iter(self._cache))
-                oldest_adapter = self._cache.pop(oldest_id)
-                import asyncio
-                asyncio.create_task(oldest_adapter.cleanup())
+                self._cache.pop(oldest_id)
+                logger.info("BackendHub: evicted unused adapter '{}' from cache", oldest_id)
             
             self._cache[backend_id] = adapter
             return adapter

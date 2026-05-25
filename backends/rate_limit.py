@@ -68,6 +68,7 @@ class GlobalRateLimiter:
                 wait = self._backoff_until - now
                 logger.warning("{} rate-limiter: 429 backoff {:.1f}s", self._name, wait)
                 await asyncio.sleep(wait)
+                now = time.monotonic()  # Refresh timestamp after sleep
 
             # proactive rolling window - optimized deque cleanup
             cutoff = now - self._window
@@ -82,6 +83,7 @@ class GlobalRateLimiter:
                 if sleep > 0:
                     logger.info("{} rate-limiter: proactive wait {:.2f}s", self._name, sleep)
                     await asyncio.sleep(sleep)
+                    now = time.monotonic()  # Refresh timestamp after sleep
 
             self._timestamps.append(now)
             self._reset_backoff()

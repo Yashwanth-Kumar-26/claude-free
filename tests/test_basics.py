@@ -79,6 +79,43 @@ def test_shortcut_quota_probe():
     assert result is not None
 
 
+def test_shortcut_title_gen():
+    from gateway.schemas import MessageParam, MessagesRequest
+    from gateway.shortcuts import maybe_title_gen
+
+    # Valid title gen prompts
+    req1 = MessagesRequest(
+        model="test",
+        messages=[MessageParam(role="user", content="generate a short title for this conversation")],
+    )
+    assert maybe_title_gen(req1) is not None
+
+    req2 = MessagesRequest(
+        model="test",
+        messages=[MessageParam(role="user", content="suggest a title")],
+    )
+    assert maybe_title_gen(req2) is not None
+
+    req3 = MessagesRequest(
+        model="test",
+        messages=[MessageParam(role="user", content="name this conversation")],
+    )
+    assert maybe_title_gen(req3) is not None
+
+    # Invalid title gen prompts (should not be matched)
+    req4 = MessagesRequest(
+        model="test",
+        messages=[MessageParam(role="user", content="Create a new folder name it Logic and Move make PDF for exam reference")],
+    )
+    assert maybe_title_gen(req4) is None
+
+    req5 = MessagesRequest(
+        model="test",
+        messages=[MessageParam(role="user", content="write a function named get_user")],
+    )
+    assert maybe_title_gen(req5) is None
+
+
 def test_model_selector_resolve():
     from gateway.selector import ModelSelector
     from settings.env import Settings

@@ -157,6 +157,7 @@ class DynamicBackendAdapter(BackendAdapter):
             temperature=request.temperature,
             tools=tools,
             input_tokens=input_tokens,
+            model=request.model,
         ):
             if first:
                 first = False

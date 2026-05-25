@@ -106,7 +106,7 @@ class OpenAICompatibleAdapter(DynamicBackendAdapter):
             # Add any additional options
             request_body.update(kwargs)
 
-            logger.debug(f"Calling {self.provider_id} API with model {self.model_id}")
+            logger.debug(f"Calling {self.provider_id} API with model {request_body.get('model') or self.model_id}")
 
             # Call OpenAI-compatible endpoint
             async with self.client.stream(

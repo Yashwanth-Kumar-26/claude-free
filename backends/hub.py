@@ -57,6 +57,16 @@ BACKEND_DESCRIPTORS: dict[str, BackendDescriptor] = {
         label="OpenRouter",
         description="OpenRouter native Anthropic messages API",
     ),
+    "opencode_go": BackendDescriptor(
+        id="opencode_go",
+        label="OpenCode Go",
+        description="OpenCode Go — OpenAI chat/completions",
+    ),
+    "opencode_zen": BackendDescriptor(
+        id="opencode_zen",
+        label="OpenCode Zen",
+        description="OpenCode Zen — OpenAI Responses API",
+    ),
 }
 
 # ── factory functions ────────────────────────────────────────────────────────
@@ -100,9 +110,43 @@ def _build_openrouter(settings: Settings) -> BackendAdapter:
     return OpenRouterAdapter(cfg)
 
 
+def _build_opencode_go(settings: Settings) -> BackendAdapter:
+    from backends.opencode.adapters.openai_compat import OpenAICompatibleAdapter
+    from backends.opencode.base_adapter import DynamicAdapterConfig
+    from backends.defaults import OPENCODE_GO_BASE
+
+    config = DynamicAdapterConfig(
+        provider_id="opencode_go",
+        provider_name="OpenCode Go",
+        api_url=OPENCODE_GO_BASE,
+        api_key=settings.opencode_api_key,
+        model_id=settings.model,
+        proxy=settings.opencode_proxy,
+    )
+    return OpenAICompatibleAdapter(config)
+
+
+def _build_opencode_zen(settings: Settings) -> BackendAdapter:
+    from backends.opencode.adapters.responses_api import ResponsesAPIAdapter
+    from backends.opencode.base_adapter import DynamicAdapterConfig
+    from backends.defaults import OPENCODE_ZEN_BASE
+
+    config = DynamicAdapterConfig(
+        provider_id="opencode_zen",
+        provider_name="OpenCode Zen",
+        api_url=OPENCODE_ZEN_BASE,
+        api_key=settings.opencode_api_key,
+        model_id=settings.model,
+        proxy=settings.opencode_proxy,
+    )
+    return ResponsesAPIAdapter(config)
+
+
 _FACTORIES: dict[str, Callable[[Settings], BackendAdapter]] = {
     "nvidia_nim": _build_nvidia,
     "open_router": _build_openrouter,
+    "opencode_go": _build_opencode_go,
+    "opencode_zen": _build_opencode_zen,
 }
 
 # Verify that descriptors and factories are in sync at import time
@@ -211,6 +255,8 @@ class BackendHub:
     def get(self, backend_id: str) -> BackendAdapter:
         """Get a backend adapter (hardcoded or dynamic).
 
+        Uses single-pass lookup with LRU reordering for fast path.
+
         Args:
             backend_id: Backend ID
 
@@ -220,26 +266,30 @@ class BackendHub:
         Raises:
             UnknownBackendError: If backend not found
         """
+        # Fast path: already cached (reuse HTTP/2 pool)
+        if backend_id in self._cache:
+            # Implicit LRU: move to end on access
+            adapter = self._cache[backend_id]
+            del self._cache[backend_id]
+            self._cache[backend_id] = adapter
+            return adapter
+
         # Try hardcoded backends first
         if backend_id in _FACTORIES:
-            if backend_id not in self._cache:
-                logger.info("BackendHub: instantiating hardcoded adapter '{}'", backend_id)
-                self._cache[backend_id] = _FACTORIES[backend_id](self._settings)
-            return self._cache[backend_id]
+            logger.info("BackendHub: instantiating adapter '{}'", backend_id)
+            adapter = _FACTORIES[backend_id](self._settings)
+            
+            # Maintain bounded cache (max 10 HTTP/2 pools)
+            if len(self._cache) >= 10:
+                oldest_id = next(iter(self._cache))
+                oldest_adapter = self._cache.pop(oldest_id)
+                import asyncio
+                asyncio.create_task(oldest_adapter.cleanup())
+            
+            self._cache[backend_id] = adapter
+            return adapter
 
-        # Try dynamic backends
-        if backend_id in self._cache:
-            return self._cache[backend_id]
-
-        if backend_id in BACKEND_DESCRIPTORS and backend_id not in _FACTORIES:
-            # It's in descriptors but not in cache/factories — might be a dynamic
-            # backend that failed to load or hasn't been loaded yet.
-                logger.warning(
-                    "BackendHub: dynamic backend '{}' is not instantiated. "
-                    "Did dynamic loading fail?",
-                    backend_id,
-                )
-
+        # Dynamic backends not found
         supported = ", ".join(f"'{k}'" for k in _FACTORIES)
         raise UnknownBackendError(f"Unknown backend '{backend_id}'. Supported: {supported}")
 

@@ -21,7 +21,7 @@ if [[ "$SHELL" == *"zsh"* ]]; then SHELL_CONFIG="$HOME/.zshrc"
 elif [[ "$SHELL" == *"bash"* ]]; then SHELL_CONFIG="$HOME/.bashrc"; fi
 
 ALREADY_CONFIGURED=0
-if grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$SHELL_CONFIG" 2>/dev/null || grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$ENV_FILE" 2>/dev/null; then
+if grep -q "ANTHROPIC_AUTH_TOKEN.*God" "$SHELL_CONFIG" 2>/dev/null; then
     ALREADY_CONFIGURED=1
 fi
 

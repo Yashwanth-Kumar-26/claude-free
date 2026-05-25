@@ -1,8 +1,25 @@
 # claudefree: Universal Provider Proxy
 
-Anthropic-compatible gateway routing Claude Code to 115+ LLM backends — fetched from [models.dev](https://github.com/anomalyco/models.dev.git).
+<div align="center">
 
+![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi)
+![uv](https://img.shields.io/badge/uv-Package_Manager-purple?style=for-the-badge)
 
+![Linux](https://img.shields.io/badge/Linux-Supported-black?style=for-the-badge&logo=linux)
+![Windows](https://img.shields.io/badge/Windows-Compatible-0078D6?style=for-the-badge&logo=windows)
+![Repo Size](https://img.shields.io/github/repo-size/Yashwanth-Kumar-26/claude-free?style=for-the-badge)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=Yashwanth-Kumar-26.claude-free)
+
+</div>
+
+---
+
+**claudefree** is an Anthropic-compatible gateway that routes Claude Code to **115+ LLM backends**, powered by dynamic provider discovery from [models.dev](https://github.com/anomalyco/models.dev).
+
+---
+
+---
 ## Quick Start
 
 ### 1. Setup

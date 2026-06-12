@@ -38,6 +38,8 @@ class ModelSelector:
         self._s = settings
 
     def select(self, claude_model: str) -> Selection:
+        if not claude_model or not isinstance(claude_model, str):
+            raise ValueError(f"Invalid model name: {claude_model!r}. Model name must be a non-empty string.")
         ref        = self._s.resolve_model(claude_model)
         backend_id, backend_model = Settings.split_backend(ref)
         if backend_model != claude_model:

@@ -234,18 +234,15 @@ class OpenAICompatibleAdapter(DynamicBackendAdapter):
 
         except Exception as e:
             logger.error(f"Error in create_message: {e}")
-            # Ensure we wrap error if needed, but since we already might have sent message_start,
-            # this error handling could break the streaming protocol, but it's okay for hard errors.
-            error_response = {
-                "type": "message_stop",
-                "message": {
-                    "type": "message",
-                    "id": "error",
-                    "content": [{"type": "text", "text": f"Error: {e!s}"}],
-                    "stop_reason": "end_turn",
-                },
-            }
-            yield f"data: {json.dumps(error_response)}\n\n"
+            # Properly close streaming protocol even on error
+            try:
+                yield sse.content_block_stop(0)
+                yield sse.message_delta("end_turn", sse.estimate_output_tokens())
+                yield sse.message_stop()
+            except Exception as format_err:
+                logger.error(f"Failed to format error response: {format_err}")
+                # Fall back to minimal valid event
+                yield sse.message_stop()
 
     def _convert_to_openai_messages(
         self, messages: list[dict[str, Any]], system: str | None = None

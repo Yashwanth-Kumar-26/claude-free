@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator
 
@@ -85,12 +86,13 @@ class GatewayService:
             ):
                 # Simple heuristic to extract output token count from stream (usually in message_delta)
                 if "output_tokens" in chunk and '"type": "message_delta"' in chunk:
-                    import json
                     try:
-                        data = json.loads(chunk.split("data: ")[1])
-                        output_tokens = data.get("usage", {}).get("output_tokens", 0)
-                    except Exception:
-                        pass
+                        parts = chunk.split("data: ")
+                        if len(parts) > 1:
+                            data = json.loads(parts[1])
+                            output_tokens = data.get("usage", {}).get("output_tokens", 0)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.debug("Failed to parse output tokens: {}", e)
                 yield chunk
         except Exception:
             had_error = True

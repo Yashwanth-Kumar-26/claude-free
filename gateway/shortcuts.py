@@ -9,6 +9,7 @@ from collections.abc import Iterator
 
 from loguru import logger
 
+from engine.tokens import count_tokens
 from .schemas import MessagesRequest
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -57,10 +58,11 @@ def _simple_stream(model: str, text: str, input_tokens: int = 1) -> Iterator[str
         "delta": {"type": "text_delta", "text": text},
     })
     yield _sse("content_block_stop", {"type": "content_block_stop", "index": 0})
+    output_tokens = count_tokens([{"role": "assistant", "content": text}])
     yield _sse("message_delta", {
         "type": "message_delta",
         "delta": {"stop_reason": "end_turn", "stop_sequence": None},
-        "usage": {"input_tokens": input_tokens, "output_tokens": len(text.split())},
+        "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
     })
     yield _sse("message_stop", {"type": "message_stop"})
 

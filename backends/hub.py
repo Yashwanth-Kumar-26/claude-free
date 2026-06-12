@@ -286,14 +286,14 @@ class BackendHub:
         if backend_id in _FACTORIES:
             logger.info("BackendHub: instantiating adapter '{}'", backend_id)
             adapter = _FACTORIES[backend_id](self._settings)
-            
+
             # Keep bounded cache to prevent unbounded HTTP/2 pool growth
             # Old adapters are cleaned up during shutdown, not inline
             if len(self._cache) >= 10:
                 oldest_id = next(iter(self._cache))
                 self._cache.pop(oldest_id)
                 logger.info("BackendHub: evicted unused adapter '{}' from cache", oldest_id)
-            
+
             self._cache[backend_id] = adapter
             return adapter
 

@@ -52,9 +52,29 @@ if ! command -v fzy &> /dev/null; then
 fi
 echo -e "${GREEN}[OK]${NC}\n"
 
-# ── 2. Fetch providers ────────────────────────────────────────────────────────
+# ── 2. Install jq ─────────────────────────────────────────────────────────────
 
-echo -e "${BLUE}[2/4] Fetching providers from models.dev...${NC}"
+echo -e "${BLUE}[2/5] Checking jq...${NC}"
+if ! command -v jq &> /dev/null; then
+    echo -e "${YELLOW}Installing jq...${NC}"
+    case "$(uname -s)" in
+        Linux*)
+            if grep -qi 'fedora' /etc/os-release 2>/dev/null; then sudo dnf install -y jq 2>/dev/null
+            elif grep -qi 'debian\|ubuntu' /etc/os-release 2>/dev/null; then sudo apt-get update && sudo apt-get install -y jq 2>/dev/null
+            elif grep -qi 'arch' /etc/os-release 2>/dev/null; then sudo pacman -S jq --noconfirm 2>/dev/null; fi
+            ;;
+        Darwin*) brew install jq 2>/dev/null ;;
+    esac
+    if ! command -v jq &> /dev/null; then
+        echo -e "${RED}[FAIL] Could not install jq${NC}"
+        exit 1
+    fi
+fi
+echo -e "${GREEN}[OK]${NC}\n"
+
+# ── 3. Fetch providers ────────────────────────────────────────────────────────
+
+echo -e "${BLUE}[3/5] Fetching providers from models.dev...${NC}"
 TEMP_API=$(mktemp)
 curl -s https://models.dev/api.json > "$TEMP_API" || { echo -e "${RED}[FAIL]${NC}"; exit 1; }
 echo -e "${GREEN}[OK]${NC}\n"
@@ -89,7 +109,7 @@ else
 fi
 
 # Models
-echo -e "\n${BLUE}[3/4] Fetching models...${NC}"
+echo -e "\n${BLUE}[4/5] Fetching models...${NC}"
 MODELS=$(jq -r ".\"$SELECTED_PROVIDER\".models | keys[]" "$TEMP_API" | sort)
 [ -z "$MODELS" ] && { echo -e "${RED}[FAIL]${NC}"; exit 1; }
 MODEL_ARRAY=($MODELS)
@@ -121,7 +141,7 @@ echo -e "${GREEN}[OK]${NC}\n"
 
 # ── 4. Save ───────────────────────────────────────────────────────────────────
 
-echo -e "${BLUE}[4/4] Saving...${NC}"
+echo -e "${BLUE}[5/5] Saving...${NC}"
 
 cat > "$CONFIG_FILE" <<EOF
 {

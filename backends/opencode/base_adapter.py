@@ -8,6 +8,8 @@ from abc import abstractmethod
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
 
+from loguru import logger
+
 from backends.base import BackendAdapter, BackendConfig
 
 
@@ -179,12 +181,18 @@ class DynamicBackendAdapter(BackendAdapter):
                 had_delta = True
                 # Extract stop_reason from upstream
                 try:
-                    data_str = chunk.split("data: ", 1)[1].strip()
-                    stop_reason = json.loads(data_str).get("delta", {}).get("stop_reason")
-                    if stop_reason:
-                        upstream_stop_reason = stop_reason
-                except Exception:
-                    pass
+                    parts = chunk.split("data: ", 1)
+                    if len(parts) < 2:
+                        logger.debug("Chunk missing 'data: ' separator: {}", chunk[:100])
+                    else:
+                        data_str = parts[1].strip()
+                        stop_reason = json.loads(data_str).get("delta", {}).get("stop_reason")
+                        if stop_reason:
+                            upstream_stop_reason = stop_reason
+                except json.JSONDecodeError as e:
+                    logger.debug("Failed to parse JSON in chunk: {}", e)
+                except Exception as e:
+                    logger.debug("Unexpected error parsing chunk: {}: {}", type(e).__name__, e)
 
             yield chunk
 

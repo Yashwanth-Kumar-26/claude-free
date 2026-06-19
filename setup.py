@@ -51,7 +51,7 @@ def print_banner() -> None:
     print(f"{S.CYN}")
     print(f"╔{S.CYN}{'═' * (COLS - 2)}╗")
     print(f"║{S.CYN}{' ' * (COLS - 2)}║")
-    line = "claudefree Setup"
+    line = "✨ claudefree Setup ✨"
     pad = (COLS - 2 - len(line)) // 2
     print(f"║{' ' * pad}{line}{' ' * (COLS - 2 - pad - len(line))}║")
     line = "Free AI for Claude Code — Multi-Provider"
@@ -63,43 +63,44 @@ def print_banner() -> None:
 
 
 def print_step(n: int, total: int, desc: str) -> None:
-    print(f"\n  {S.BLU}[{n}/{total}]{S.RST} {S.BLD}{desc}{S.RST}")
+    print(f"\n  {S.BLU}◉{S.RST} {S.BLD}Step {n} of {total}{S.RST}  {desc}")
 
 
-def _print(tag: str, color: str, msg: str) -> None:
-    print(f"  {color}[{tag}]{S.RST} {msg}")
+def _print(sym: str, color: str, msg: str) -> None:
+    print(f"  {msg} {color}{sym}{S.RST}")
 
 
 def ok(msg: str) -> None:
-    _print("OK", S.GRN, msg)
+    _print("✓", S.GRN, msg)
 
 
 def info(msg: str) -> None:
-    _print("INFO", S.CYN, msg)
+    _print("ℹ", S.CYN, msg)
 
 
 def warn(msg: str) -> None:
-    _print("WARN", S.YLW, msg)
+    _print("⚠", S.YLW, msg)
 
 
 def error(msg: str) -> None:
-    _print("FAIL", S.RED, msg)
+    _print("✗", S.RED, msg)
 
 
 def sub(msg: str) -> None:
-    print(f"    {S.CYN}[..]{S.RST} {msg}")
+    """Sub-step in-progress indicator — removed; spinner handles this."""
+    pass  # spinner animation replaces the static [..] line
 
 
 def sub_ok(msg: str) -> None:
-    print(f"    {S.GRN}[OK]{S.RST} {msg}")
+    print(f"    {msg} {S.GRN}✓{S.RST}")
 
 
 def sub_err(msg: str) -> None:
-    print(f"    {S.RED}[FAIL]{S.RST} {msg}")
+    print(f"    {msg} {S.RED}✗{S.RST}")
 
 
 def sub_warn(msg: str) -> None:
-    print(f"    {S.YLW}[WARN]{S.RST} {msg}")
+    print(f"    {msg} {S.YLW}⚠{S.RST}")
 
 
 def divider() -> None:
@@ -135,7 +136,7 @@ class Spinner:
         self._running = False
         if self._thread is not None:
             self._thread.join()
-        sys.stdout.write(f"\r    {S.GRN}[OK]{S.RST} {self.msg}{S.DIM}   {S.RST}\n")
+        sys.stdout.write(f"\r    {self.msg} {S.GRN}✓{S.RST}{S.DIM}{S.RST}\n")
         sys.stdout.flush()
 
     def _spin(self) -> None:
@@ -538,7 +539,7 @@ def show_summary(provider: str, models: dict[str, str]) -> None:
     w = COLS - 4
     print(f"\n{S.GRN}")
     print(f"╔{'═' * (COLS - 2)}╗")
-    label = "Setup Complete"
+    label = "Setup Complete ✓"
     pad = (COLS - 2 - len(label)) // 2
     print(f"║{' ' * pad}{S.BLD}{S.GRN}{label}{S.RST}{S.GRN}{' ' * (COLS - 2 - pad - len(label))}║")
     print(f"╠{'═' * (COLS - 2)}╣")
@@ -632,5 +633,5 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n  {S.YLW}[WARN]{S.RST} Setup cancelled by user")
+        print(f"\n  Setup cancelled by user {S.YLW}⚠{S.RST}")
         sys.exit(1)

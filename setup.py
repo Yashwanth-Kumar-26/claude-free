@@ -408,22 +408,27 @@ def pick_models(providers: dict, provider: str) -> dict[str, str]:
             shown += 1
         if len(model_names) > 10:
             print(f"      {S.DIM}... and {len(model_names) - 10} more available{S.RST}")
-        choice = fuzzy_select(model_names, prompt=f"Search {tier}")
-        if choice is None:
-            try:
-                raw = input(f"\n      {S.BLD}Selection{S.RST} (0-{len(model_names) + 1}): ").strip()
-                if raw == "0":
-                    return "[SAME_AS_DEFAULT]"
-                if raw == "1":
-                    return input(f"      {S.BLD}Custom name{S.RST}: ").strip()
-                idx = int(raw) - 2
-                if 0 <= idx < len(model_names):
-                    return model_names[idx]
-            except (ValueError, EOFError, KeyboardInterrupt):
-                pass
-            warn("Invalid — using [SAME_AS_DEFAULT]")
-            return "[SAME_AS_DEFAULT]"
-        return choice
+        fzf_opts = ["[SAME_AS_DEFAULT]", "[CUSTOM_MODEL]"] + model_names
+        choice = fuzzy_select(fzf_opts, prompt=f"Search {tier}")
+        if choice == "[CUSTOM_MODEL]":
+            return input(f"      {S.BLD}Custom name{S.RST}: ").strip()
+        if choice:
+            return choice
+
+        # fzf not available — fallback to numbered menu
+        try:
+            raw = input(f"\n      {S.BLD}Selection{S.RST} (0-{len(model_names) + 1}): ").strip()
+            if raw == "0":
+                return "[SAME_AS_DEFAULT]"
+            if raw == "1":
+                return input(f"      {S.BLD}Custom name{S.RST}: ").strip()
+            idx = int(raw) - 2
+            if 0 <= idx < len(model_names):
+                return model_names[idx]
+        except (ValueError, EOFError, KeyboardInterrupt):
+            pass
+        warn("Invalid — using [SAME_AS_DEFAULT]")
+        return "[SAME_AS_DEFAULT]"
 
     models = {
         "DEFAULT": pick_one("DEFAULT"),

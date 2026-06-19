@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import string
 import subprocess
 import sys
 import threading
@@ -104,7 +103,7 @@ def sub_warn(msg: str) -> None:
 
 
 def divider() -> None:
-    print(f"  {S.DIM}─" * 36)
+    print(f"  {S.DIM}{'─' * 36}{S.RST}")
 
 
 # ── Spinner ──────────────────────────────────────────────────────────────
@@ -249,15 +248,16 @@ def _check_cmd(cmd: str) -> bool:
 def _run(*args: str, **kwargs: object) -> bool:
     """Run a command, return True if it succeeded."""
     try:
-        subprocess.run(
+        result = subprocess.run(
             args,
             timeout=kwargs.get("timeout", 60),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=False,
             **{k: v for k, v in kwargs.items() if k in ("shell", "cwd")},
         )
-        return True
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
 
@@ -447,7 +447,7 @@ def pick_models(providers: dict, provider: str) -> dict[str, str]:
 
 
 def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
-    """Write config.json and .env."""
+    """Write config.json and merge/update .env."""
     CONFIG_FILE.write_text(json.dumps({
         "provider": provider,
         "model_default": models["DEFAULT"],
@@ -455,22 +455,55 @@ def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
         "model_sonnet": models["SONNET"],
         "model_haiku": models["HAIKU"],
     }, indent=2) + "\n", encoding="utf-8")
-
     sub_ok("config.json written")
 
-    env_text = f"# claudefree credentials\n{provider.upper().replace('-', '_')}_API_KEY=\"{api_key}\"\nANTHROPIC_AUTH_TOKEN=\"God\"\n"
-    ENV_FILE.write_text(env_text, encoding="utf-8")
+    env_key = provider.upper().replace("-", "_") + "_API_KEY"
+    updates = {env_key: api_key, "ANTHROPIC_AUTH_TOKEN": "God"}
+
+    # Read existing .env (if any) and merge — preserving user's other keys
+    new_lines = []
+    seen_keys = set()
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if "=" in stripped and not stripped.startswith("#"):
+                k = stripped.split("=", 1)[0].strip()
+                if k in updates:
+                    new_lines.append(f'{k}="{updates[k]}"')
+                    seen_keys.add(k)
+                    continue
+            new_lines.append(line)
+    # Append any new keys not already in the file
+    for k, v in updates.items():
+        if k not in seen_keys:
+            new_lines.append(f'{k}="{v}"')
+
+    # Prepend header if creating new file
+    if not ENV_FILE.exists():
+        new_lines.insert(0, "# claudefree credentials")
+
+    ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     ENV_FILE.chmod(0o600)
-    sub_ok(".env written (permissions: 600)")
+    sub_ok(".env updated (existing settings preserved)")
     info(f"Config:  {S.DIM}{CONFIG_FILE}{S.RST}")
     info(f"Secrets: {S.DIM}{ENV_FILE}{S.RST}")
 
 
 def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
-    """Add ANTHROPIC_* environment variables to shell rc."""
+    """Add ANTHROPIC_* environment variables to shell rc (or Windows registry)."""
     if already_configured:
         info("Shell environment already configured — skipped")
         return
+
+    if sys.platform == "win32":
+        print()
+        info("Setting ANTHROPIC environment variables (Windows)...")
+        _run("setx", "ANTHROPIC_AUTH_TOKEN", "God", timeout=10)
+        _run("setx", "ANTHROPIC_BASE_URL", "http://localhost:16324", timeout=10)
+        sub_ok("Added to user environment variables")
+        info("Restart your terminal for changes to take effect")
+        return
+
     if rc is None:
         info("No shell config file found — skipping")
         return
@@ -563,6 +596,8 @@ def show_summary(provider: str, models: dict[str, str]) -> None:
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    global _HAS_FZF, _HAS_FZY, _FUZZY_CMD
+
     print_banner()
     # Determine if already configured
     rc = detect_shell_rc()
@@ -577,7 +612,13 @@ def main() -> None:
 
     # ── Step 1: Prerequisites ────────────────────────────────────────────
     print_step(1, TOTAL, "Checking prerequisites")
-    sub_ok(f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    sub_ok(f"Python {py_ver}")
+
+    if sys.version_info < (3, 11):
+        error(f"Python 3.11+ required (found {py_ver})")
+        info("Upgrade Python: https://www.python.org/downloads/")
+        sys.exit(1)
 
     curl_ok = _check_cmd("curl")
     if curl_ok:
@@ -590,15 +631,19 @@ def main() -> None:
         sub_ok("uv found")
 
     if sys.platform == "win32":
-        fzf_installed = _install_fzf()
+        _install_fzf()
     else:
-        fzy_installed = _install_fzy()
+        _install_fzy()
 
-    fuzzy_msg = "fzf ready" if _HAS_FZF else ("fzy ready" if _HAS_FZY else "no fuzzy finder — using numbered menu")
+    # Refresh fuzzy detection after install attempt
+    _HAS_FZF = bool(shutil.which("fzf"))
+    _HAS_FZY = bool(shutil.which("fzy"))
+    _FUZZY_CMD = "fzf" if _HAS_FZF else ("fzy" if _HAS_FZY else None)
+
     if _HAS_FZF or _HAS_FZY:
-        sub_ok(fuzzy_msg)
+        sub_ok("fzf ready" if _HAS_FZF else "fzy ready")
     else:
-        sub_warn(fuzzy_msg)
+        sub_warn("no fuzzy finder — using numbered menu")
 
     # ── Step 2: Fetch providers ──────────────────────────────────────────
     print_step(2, TOTAL, "Fetching providers from models.dev")

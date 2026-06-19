@@ -1,5 +1,8 @@
 #!/bin/bash
-# setup.sh — claudefree Setup (TUI Enhanced)
+# setup.sh — claudefree Setup (DEPRECATED)
+#
+# ⚠ This script is deprecated. Use the cross-platform setup.py instead:
+#      python setup.py     or     uv run python setup.py
 #
 # Detects if shell env is already configured. If so, skips to provider selection.
 # Run with: bash setup.sh   or   source setup.sh

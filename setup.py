@@ -322,8 +322,8 @@ def _install_fzf() -> bool:
         if _check_cmd(mgr):
             sub(f"Installing fzf via {mgr}...")
             {
-                "winget": lambda: _run(mgr, "install", "fzf"),
-                "scoop": lambda: _run(mgr, "install", "fzf"),
+                "winget": lambda: _run(mgr, "install", "fzf", "--accept-package-agreements", "--accept-source-agreements"),
+                "scoop": lambda: _run(mgr, "install", "fzf", "-y"),
                 "choco": lambda: _run(mgr, "install", "fzf", "-y"),
             }[mgr]()
             if _check_cmd("fzf.exe"):
@@ -607,27 +607,52 @@ def check_claude_cli() -> None:
             return
         except (FileNotFoundError, OSError):
             pass  # binary exists but can't run
-    warn("claude not found — installing via npm...")
-    if _check_cmd("npm"):
+    
+    ok = False
+    if sys.platform == "win32":
+        # Windows: try PowerShell installer first, then winget
+        warn("claude not found — installing via PowerShell...")
         try:
-            if sys.platform == "win32":
-                # On Windows npm is npm.cmd — needs shell=True to resolve via PATHEXT
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", 
+                 "irm https://claude.ai/install.ps1 | iex"],
+                timeout=300,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            ok = result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        
+        # Fallback to winget
+        if not ok:
+            sub_warn("PowerShell installer failed — trying winget...")
+            try:
                 result = subprocess.run(
-                    "npm install -g @anthropic-ai/claude-code",
-                    shell=True, timeout=120,
+                    ["winget", "install", "Anthropic.ClaudeCode", 
+                     "--accept-package-agreements", "--accept-source-agreements"],
+                    timeout=300,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 )
                 ok = result.returncode == 0
-            else:
-                ok = _run("npm", "install", "-g", "@anthropic-ai/claude-code", timeout=120)
-        except (subprocess.TimeoutExpired, OSError):
-            ok = False
-        if ok and _check_cmd("claude"):
-            sub_ok("claude installed")
-        else:
-            sub_err("npm install failed")
+            except (subprocess.TimeoutExpired, OSError):
+                pass
     else:
-        sub_err(f"npm not found. Install Node.js: {S.BLD}https://nodejs.org{S.RST}")
+        # macOS/Linux/WSL: use curl installer
+        warn("claude not found — installing via curl installer...")
+        try:
+            result = subprocess.run(
+                "curl -fsSL https://claude.ai/install.sh | bash",
+                shell=True, timeout=300,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            ok = result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    
+    if ok and _check_cmd("claude"):
+        sub_ok("claude installed")
+    else:
+        sub_err("claude installation failed — please install manually from https://claude.ai")
 
 
 def show_summary(provider: str, models: dict[str, str]) -> None:

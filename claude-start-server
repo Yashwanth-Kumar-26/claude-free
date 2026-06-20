@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve symlink so DIR always points to the project root
+SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+DIR="$(dirname "$SCRIPT")"
 
 # Use .venv python if available (uv sync creates it), otherwise system python
 if [ -x "$DIR/.venv/bin/python3" ]; then

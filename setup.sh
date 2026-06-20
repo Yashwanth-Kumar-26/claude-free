@@ -69,7 +69,11 @@ run_with_spinner() {
     done
     wait "$pid"
     local rc=$?
-    printf "\r    ${GREEN}✓${RST} %s${DIM}   ${RST}\n" "$msg"
+    if [ $rc -eq 0 ]; then
+        printf "\r    ${GREEN}✓${RST} %s${DIM}   ${RST}\n" "$msg"
+    else
+        printf "\r    ${RED}✗${RST} %s${DIM}   ${RST}\n" "$msg"
+    fi
     return $rc
 }
 

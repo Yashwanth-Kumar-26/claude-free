@@ -131,11 +131,16 @@ class Spinner:
         self._thread = threading.Thread(target=self._spin, daemon=True)
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, success: bool = True) -> None:
+        if not self._running and self._thread is None:
+            return  # idempotent — already stopped
         self._running = False
         if self._thread is not None:
             self._thread.join()
-        sys.stdout.write(f"\r    {self.msg} {S.GRN}✓{S.RST}{S.DIM}{S.RST}\n")
+            self._thread = None
+        sym = "✓" if success else "✗"
+        color = S.GRN if success else S.RED
+        sys.stdout.write(f"\r    {self.msg} {color}{sym}{S.RST}\n")
         sys.stdout.flush()
 
     def _spin(self) -> None:
@@ -175,9 +180,12 @@ def fuzzy_select(options: list[str], prompt: str = "Search", **kwargs: str) -> s
     if not _use_fuzzy():
         return None
     input_str = "\n".join(options)
-    args = [_FUZZY_CMD, "--prompt", f"{prompt}> "]
-    for flag, val in kwargs.items():
-        args.extend([f"--{flag.replace('_', '-')}", val])
+    if _FUZZY_CMD == "fzy":
+        args = ["fzy", "-p", f"{prompt}> "]
+    else:
+        args = ["fzf", "--prompt", f"{prompt}> "]
+        for flag, val in kwargs.items():
+            args.extend([f"--{flag.replace('_', '-')}", val])
     try:
         result = subprocess.run(
             args, input=input_str, capture_output=True, text=True,
@@ -327,7 +335,6 @@ def _install_fzf() -> bool:
 
 def fetch_providers() -> dict | NoReturn:
     """Download and parse the providers JSON."""
-    sub("Downloading provider list...")
     spinner = Spinner("Downloading provider list...")
     spinner.start()
     try:
@@ -338,13 +345,12 @@ def fetch_providers() -> dict | NoReturn:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read()
         providers = json.loads(data)
+        spinner.stop(success=True)
     except Exception as exc:
-        spinner.stop()
+        spinner.stop(success=False)
         sys.stdout.write(f"\r{S.RST}")
         error(f"Failed to fetch providers: {exc}")
         sys.exit(1)
-    finally:
-        spinner.stop()
     sys.stdout.write(f"\r{S.RST}")
     size_kb = len(data) / 1024
     sub_ok(f"Provider list downloaded ({size_kb:.0f} KB)")

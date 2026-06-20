@@ -380,7 +380,8 @@ set "shown=0"
 set "maxshow=10"
 if %MODEL_COUNT% lss %maxshow% set /a "maxshow=%MODEL_COUNT%"
 for /l %%i in (2,1,%maxshow%) do (
-    set "mname=!MODEL_%%i!"
+    set /a "midx=%%i-1"
+    call set "mname=%%MODEL_!midx!%%"
     set "padded=%%i     "
     echo      %DIM%!padded:~0,2!%RST%^) !mname!
 )
@@ -406,14 +407,15 @@ if "%FZF_AVAILABLE%"=="1" (
     del "%TEMP%\cf_model_list.txt" "%TEMP%\cf_model_sel.txt" 2>nul
 ) else (
     echo.
-    set "MAX_NUM=%MODEL_COUNT%"
-    set /p "M_NUM=    Selection (0-%MAX_NUM%): "
+    set /a "MAX_NUM=!MODEL_COUNT!+1"
+    set /p "M_NUM=    Selection (0-!MAX_NUM!): "
     if "!M_NUM!"=="0" set "MODEL_RESULT=[SAME_AS_DEFAULT]" & goto model_done
     if "!M_NUM!"=="1" (
         set /p "MODEL_RESULT=    Custom name: "
         goto model_done
     )
-    for %%i in (!M_NUM!) do set "MODEL_RESULT=!MODEL_%%i!"
+    set /a "midx=!M_NUM!-1"
+    call set "MODEL_RESULT=%%MODEL_!midx!%%"
 )
 :model_done
 goto :eof

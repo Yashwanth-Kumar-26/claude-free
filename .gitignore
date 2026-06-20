@@ -49,6 +49,7 @@ Thumbs.db
 
 # Project-specific
 config.json
+telegram_sessions.json
 scratch/
 Docs/
 Goo/

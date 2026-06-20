@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
 set -e
-DIR="$(python3 -c "import os; print(os.path.dirname(os.path.realpath('${0}')))")"
-exec uv run --directory "$DIR" python -m cli.entrypoints "$@"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Use .venv python if available (uv sync creates it), otherwise system python
+if [ -x "$DIR/.venv/bin/python3" ]; then
+    PYTHON="$DIR/.venv/bin/python3"
+else
+    PYTHON="python3"
+fi
+
+cd "$DIR"
+exec "$PYTHON" -m cli.entrypoints "$@"

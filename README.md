@@ -24,19 +24,18 @@
 
 ### 1. Setup
 
-**Linux / macOS:**
+**All platforms (Python ≥ 3.11):**
 ```bash
 git clone https://github.com/Yashwanth-Kumar-26/claude-free
 cd claude-free
-./setup.sh
+python setup.py
+```
+Or with `uv`:
+```bash
+uv run python setup.py
 ```
 
-**Windows:**
-```cmd
-git clone https://github.com/Yashwanth-Kumar-26/claude-free
-cd claude-free
-.\setup.cmd
-```
+> **Legacy:** `./setup.sh` (Linux/macOS) and `.\setup.cmd` (Windows) still work but are deprecated.
 
 This guides you through:
 - Selecting a provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
@@ -44,7 +43,20 @@ This guides you through:
 - Entering API keys
 - Setting `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` env vars (first run only)
 
-### 2. Start Server
+### 2. Install Dependencies
+
+```bash
+pip install -e .
+```
+
+Or with `uv` (faster):
+```bash
+uv sync
+```
+
+> `pip install -e .` installs the package from `pyproject.toml` and makes the `claude-start-server` command available globally.
+
+### 3. Start Server
 
 ```bash
 claude-start-server
@@ -55,12 +67,12 @@ Or directly with python:
 python server.py
 ```
 
-### 3. Connect Claude
+### 4. Connect Claude
 
 ```bash
 claude
 ```
-### 4. Network Exposure (Optional)
+### 5. Network Exposure (Optional)
 
 ```bash
 python serverip.py
@@ -96,7 +108,7 @@ A single proxy that speaks Anthropic-compatible API on one side, and can route t
 ## Configuration
 
 ### Backend Selection
-Edit `config.json` or re-run `setup.sh`/`setup.cmd` to change:
+Edit `config.json` or re-run `python setup.py` to change:
 ```json
 {
   "provider": "open_router",
@@ -129,8 +141,9 @@ Edit `config.json` or re-run `setup.sh`/`setup.cmd` to change:
 
 | File | Purpose |
 |------|---------|
-| `setup.sh` | Full setup for Linux/macOS |
-| `setup.cmd` | Full setup for Windows |
+| `setup.py` | Cross-platform setup (all OS) |
+| `setup.sh` | Deprecated — legacy Linux/macOS setup |
+| `setup.cmd` | Deprecated — legacy Windows setup |
 | `claude-start-server` | Start script (bash) |
 | `claude-start-server.bat` | Start script (Windows) |
 | `config.json` | Provider and model configuration |
@@ -152,7 +165,8 @@ ClaudeFree routes requests through:
 ## Development
 
 ```bash
-uv sync              # Install dependencies
-pytest tests/        # Run tests
-claude-start-server  # Start with logging
+# Install dependencies
+pip install -e .      # or: uv sync
+pytest tests/         # Run tests
+claude-start-server   # Start with logging
 ```

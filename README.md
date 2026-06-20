@@ -43,7 +43,20 @@ This guides you through:
 - Entering API keys
 - Setting `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` env vars (first run only)
 
-### 2. Start Server
+### 2. Install Dependencies
+
+```bash
+pip install -e .
+```
+
+Or with `uv` (faster):
+```bash
+uv sync
+```
+
+> `pip install -e .` installs the package from `pyproject.toml` and makes the `claude-start-server` command available globally.
+
+### 3. Start Server
 
 ```bash
 claude-start-server
@@ -54,12 +67,12 @@ Or directly with python:
 python server.py
 ```
 
-### 3. Connect Claude
+### 4. Connect Claude
 
 ```bash
 claude
 ```
-### 4. Network Exposure (Optional)
+### 5. Network Exposure (Optional)
 
 ```bash
 python serverip.py
@@ -152,7 +165,8 @@ ClaudeFree routes requests through:
 ## Development
 
 ```bash
-uv sync              # Install dependencies
-pytest tests/        # Run tests
-claude-start-server  # Start with logging
+# Install dependencies
+pip install -e .      # or: uv sync
+pytest tests/         # Run tests
+claude-start-server   # Start with logging
 ```

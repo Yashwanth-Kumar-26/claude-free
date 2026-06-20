@@ -531,11 +531,36 @@ def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
 
 
 def install_start_server() -> None:
-    """Symlink/copy claude-start-server to ~/.local/bin."""
+    """Install claude-start-server to PATH."""
     print()
     info("Installing claude-start-server to PATH...")
-    src = SCRIPT_DIR / "claude-start-server"
     _HOME_BIN.mkdir(parents=True, exist_ok=True)
+
+    if sys.platform == "win32":
+        src_bat = SCRIPT_DIR / "claude-start-server.bat"
+        dest_bat = _HOME_BIN / "claude-start-server.bat"
+        if src_bat.exists():
+            shutil.copy2(src_bat, dest_bat)
+            # Add ~\.local\bin to user PATH via PowerShell (safer than setx)
+            ps_add_path = (
+                f'$p = [Environment]::GetEnvironmentVariable("PATH","User");'
+                f'if ($p -notlike "*{_HOME_BIN}*") {{'
+                f'  [Environment]::SetEnvironmentVariable("PATH",$p+";{_HOME_BIN}","User")'
+                f'}}'
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_add_path],
+                capture_output=True, timeout=15,
+            )
+            sub_ok("claude-start-server.bat installed to ~/.local/bin")
+            sub_ok("~/.local/bin added to user PATH")
+            info("Restart your terminal to use 'claude-start-server'")
+        else:
+            warn("claude-start-server.bat not found in project")
+            info(f"Run: {S.BLD}uv run --directory {SCRIPT_DIR} python -m cli.entrypoints{S.RST}")
+        return
+
+    src = SCRIPT_DIR / "claude-start-server"
     dest = _HOME_BIN / "claude-start-server"
     if src.exists():
         try:
@@ -551,20 +576,52 @@ def install_start_server() -> None:
         warn("claude-start-server not found in project")
 
 
+def _find_claude() -> str | None:
+    """Locate claude CLI — checks PATH and common npm install locations."""
+    # Check PATH first
+    found = shutil.which("claude")
+    if found:
+        return found
+    # On Windows, npm installs to %APPDATA%\npm — check there too
+    if sys.platform == "win32":
+        for base in (os.environ.get("APPDATA", ""), os.environ.get("LOCALAPPDATA", "")):
+            for name in ("claude", "claude.cmd", "claude.exe"):
+                candidate = Path(base) / "npm" / name
+                if candidate.exists():
+                    return str(candidate)
+    return None
+
+
 def check_claude_cli() -> None:
     """Check for claude CLI, offer to install if missing."""
     print()
     info("Checking Claude Code CLI...")
-    if _check_cmd("claude"):
-        ver = subprocess.run(
-            ["claude", "--version"], capture_output=True, text=True,
-            timeout=10,
-        ).stdout.strip() or "installed"
-        sub_ok(f"claude CLI found ({ver})")
-        return
+    claude_path = _find_claude()
+    if claude_path:
+        try:
+            ver = subprocess.run(
+                [claude_path, "--version"], capture_output=True, text=True,
+                timeout=10,
+            ).stdout.strip() or "installed"
+            sub_ok(f"claude CLI found ({ver})")
+            return
+        except (FileNotFoundError, OSError):
+            pass  # binary exists but can't run
     warn("claude not found — installing via npm...")
     if _check_cmd("npm"):
-        ok = _run("npm", "install", "-g", "@anthropic-ai/claude-code", timeout=120)
+        try:
+            if sys.platform == "win32":
+                # On Windows npm is npm.cmd — needs shell=True to resolve via PATHEXT
+                result = subprocess.run(
+                    "npm install -g @anthropic-ai/claude-code",
+                    shell=True, timeout=120,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                ok = result.returncode == 0
+            else:
+                ok = _run("npm", "install", "-g", "@anthropic-ai/claude-code", timeout=120)
+        except (subprocess.TimeoutExpired, OSError):
+            ok = False
         if ok and _check_cmd("claude"):
             sub_ok("claude installed")
         else:

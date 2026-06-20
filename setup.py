@@ -537,27 +537,36 @@ def install_start_server() -> None:
     _HOME_BIN.mkdir(parents=True, exist_ok=True)
 
     if sys.platform == "win32":
-        src_bat = SCRIPT_DIR / "claude-start-server.bat"
         dest_bat = _HOME_BIN / "claude-start-server.bat"
-        if src_bat.exists():
-            shutil.copy2(src_bat, dest_bat)
-            # Add ~\.local\bin to user PATH via PowerShell (safer than setx)
-            ps_add_path = (
-                f'$p = [Environment]::GetEnvironmentVariable("PATH","User");'
-                f'if ($p -notlike "*{_HOME_BIN}*") {{'
-                f'  [Environment]::SetEnvironmentVariable("PATH",$p+";{_HOME_BIN}","User")'
-                f'}}'
-            )
-            subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_add_path],
-                capture_output=True, timeout=15,
-            )
-            sub_ok("claude-start-server.bat installed to ~/.local/bin")
-            sub_ok("~/.local/bin added to user PATH")
-            info("Restart your terminal to use 'claude-start-server'")
-        else:
-            warn("claude-start-server.bat not found in project")
-            info(f"Run: {S.BLD}uv run --directory {SCRIPT_DIR} python -m cli.entrypoints{S.RST}")
+        # Create a wrapper .bat that hardcodes the claudefree directory path
+        wrapper_content = f"""@echo off
+setlocal
+REM Wrapper for claude-start-server — hardcoded to work from anywhere
+set "CLAUDEFREE_DIR={SCRIPT_DIR}"
+
+REM Use .venv python if available, otherwise system python
+if exist "%CLAUDEFREE_DIR%\\.venv\\Scripts\\python.exe" (
+    "%CLAUDEFREE_DIR%\\.venv\\Scripts\\python.exe" -m cli.entrypoints %*
+) else (
+    python -m cli.entrypoints %*
+)
+"""
+        dest_bat.write_text(wrapper_content, encoding="utf-8")
+        
+        # Add ~\.local\bin to user PATH via PowerShell (safer than setx)
+        ps_add_path = (
+            f'$p = [Environment]::GetEnvironmentVariable("PATH","User");'
+            f'if ($p -notlike "*{_HOME_BIN}*") {{'
+            f'  [Environment]::SetEnvironmentVariable("PATH",$p+";{_HOME_BIN}","User")'
+            f'}}'
+        )
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_add_path],
+            capture_output=True, timeout=15,
+        )
+        sub_ok("claude-start-server.bat installed to ~/.local/bin")
+        sub_ok("~/.local/bin added to user PATH")
+        info("Restart your terminal to use 'claude-start-server'")
         return
 
     src = SCRIPT_DIR / "claude-start-server"

@@ -538,19 +538,16 @@ def install_start_server() -> None:
 
     if sys.platform == "win32":
         dest_bat = _HOME_BIN / "claude-start-server.bat"
-        # Create a wrapper .bat that hardcodes the claudefree directory path
+        # Create a wrapper .bat that cds into project dir (no uv dependency)
         wrapper_content = f"""@echo off
 setlocal
-REM Wrapper for claude-start-server — hardcoded to work from anywhere
-set "CLAUDEFREE_DIR={SCRIPT_DIR}"
-
-REM Use .venv python if available, otherwise system python
-if exist "%CLAUDEFREE_DIR%\\.venv\\Scripts\\python.exe" (
-    "%CLAUDEFREE_DIR%\\.venv\\Scripts\\python.exe" -m cli.entrypoints %*
+set "DIR={SCRIPT_DIR}"
+cd /d "%DIR%"
+if exist "%DIR%\\.venv\\Scripts\\python.exe" (
+    "%DIR%\\.venv\\Scripts\\python.exe" -m cli.entrypoints %*
 ) else (
     python -m cli.entrypoints %*
-)
-"""
+)"""
         dest_bat.write_text(wrapper_content, encoding="utf-8")
         
         # Add ~\.local\bin to user PATH via PowerShell (safer than setx)

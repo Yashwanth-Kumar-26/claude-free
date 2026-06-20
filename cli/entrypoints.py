@@ -3,8 +3,35 @@
 from __future__ import annotations
 
 
+def _chdir_project_root() -> None:
+    """Change to the project root so config.json/.env are found.
+
+    Checks (in order):
+      1. editable-install root — `cli/entrypoints.py` grandparent  (dev setup)
+      2. standard user config dir —  ~/.config/claudefree/
+      3. current directory already has config — stays put
+    """
+    import os
+    from pathlib import Path
+
+    candidates = [
+        Path(__file__).resolve().parent.parent,          # editable install
+        Path.home() / ".config" / "claudefree",          # standard user config
+    ]
+    for root in candidates:
+        if root.is_dir() and ((root / "config.json").is_file() or (root / ".env").is_file()):
+            os.chdir(root)
+            return
+
+    # If CWD already has config, we're fine
+    if (Path.cwd() / "config.json").is_file() or (Path.cwd() / ".env").is_file():
+        return
+
+
 def serve() -> None:
     """Start the claudefree gateway server."""
+    _chdir_project_root()
+
     import uvicorn
 
     from cli.process_registry import kill_all_best_effort

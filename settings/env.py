@@ -134,21 +134,29 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _load_config_json(self) -> Settings:
-        """Load model configuration from config.json if it exists."""
-        if "model" not in self.model_fields_set:
-            config_path = Path("config.json")
-            if config_path.is_file():
-                try:
-                    import json
+        """Load model configuration from config.json if it exists.
 
-                    with open(config_path) as f:
-                        cfg = json.load(f)
-                        provider = cfg.get("provider")
-                        model_name = cfg.get("model_default")
-                        if provider and model_name:
-                            self.model = f"{provider}/{model_name}"
-                except Exception:
-                    pass
+        Checks CWD first, then ~/.config/claudefree/config.json.
+        """
+        if "model" not in self.model_fields_set:
+            config_paths = [
+                Path("config.json"),
+                Path.home() / ".config" / "claudefree" / "config.json",
+            ]
+            for config_path in config_paths:
+                if config_path.is_file():
+                    try:
+                        import json
+
+                        with open(config_path) as f:
+                            cfg = json.load(f)
+                            provider = cfg.get("provider")
+                            model_name = cfg.get("model_default")
+                            if provider and model_name:
+                                self.model = f"{provider}/{model_name}"
+                                break
+                    except Exception:
+                        pass
         return self
 
     # ── Properties ──────────────────────────────────────────────────────────

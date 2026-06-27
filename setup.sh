@@ -1,11 +1,9 @@
 #!/bin/bash
-# setup.sh — claudefree Setup (DEPRECATED)
+# setup.sh — claudefree Setup (preferred)
 #
-# ⚠ This script is deprecated. Use the cross-platform setup.py instead:
-#      python setup.py     or     uv run python setup.py
-#
-# Detects if shell env is already configured. If so, skips to provider selection.
 # Run with: bash setup.sh   or   source setup.sh
+# Bootstraps the project on Linux/macOS: creates virtualenv, installs deps, writes config.json and .env
+# Detects if shell env is already configured and guides provider selection.
 
 set -e
 

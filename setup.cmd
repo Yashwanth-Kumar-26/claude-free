@@ -1,10 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 REM ╔═══════════════════════════════════════════════════════════════╗
-REM ║  setup.cmd — claudefree Setup (DEPRECATED)                   ║
+REM ║  setup.cmd — claudefree Setup (preferred)                     ║
 REM ║                                                              ║
-REM ║  ⚠ This script is deprecated. Use the cross-platform         ║
-REM ║    setup.py instead:  python setup.py                        ║
+REM ║  Run with: setup.cmd   or   powershell -File setup.cmd        ║
 REM ╚═══════════════════════════════════════════════════════════════╝
 
 chcp 65001 >nul

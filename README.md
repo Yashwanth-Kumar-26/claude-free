@@ -24,18 +24,25 @@
 
 ### 1. Setup
 
-**All platforms (Python ≥ 3.11):**
+Recommended: use the platform-specific setup scripts included in the repo.
+
+Linux / macOS (bash):
 ```bash
-git clone https://github.com/Yashwanth-Kumar-26/claude-free
-cd claude-free
-python setup.py
-```
-Or with `uv`:
-```bash
-uv run python setup.py
+./setup.sh
 ```
 
-> **Legacy:** `./setup.sh` (Linux/macOS) and `.\setup.cmd` (Windows) still work but are deprecated.
+Windows (PowerShell or CMD):
+```powershell
+.\setup.cmd
+```
+
+These scripts create a virtual environment (./.venv or ./venv), install dependencies from requirements.txt or pyproject, and guide basic configuration (API keys, config.json). They are the preferred way to bootstrap the project on each platform.
+
+If you prefer the Python installer path, the cross-platform `setup.py` still exists:
+```bash
+python setup.py
+```
+
 
 This guides you through:
 - Selecting a provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
@@ -142,8 +149,8 @@ Edit `config.json` or re-run `python setup.py` to change:
 | File | Purpose |
 |------|---------|
 | `setup.py` | Cross-platform setup (all OS) |
-| `setup.sh` | Deprecated — legacy Linux/macOS setup |
-| `setup.cmd` | Deprecated — legacy Windows setup |
+| `setup.sh` | Platform setup script (Linux/macOS) — run `./setup.sh` |
+| `setup.cmd` | Platform setup script (Windows) — run `\.\setup.cmd` |
 | `claude-start-server` | Start script (bash) |
 | `claude-start-server.bat` | Start script (Windows) |
 | `config.json` | Provider and model configuration |

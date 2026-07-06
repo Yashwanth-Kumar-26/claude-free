@@ -106,8 +106,8 @@ show_summary() {
     printf "║  ${DIM}%-20s${RST}${GREEN} %-${w}s${RST}${GREEN}║\n" "Secrets" "$ef"
     printf '╠%s╣\n' "$line"
     echo -e "${GREEN}║  ${RST}${BLD}Next Steps:${RST}${GREEN}                                    ║${RST}"
-    printf '%s║  %s%s  1.%s Start proxy → %sclaude-start-server%s            ║%s\n' "${GREEN}" "${RST}" "${CYAN}" "${RST}" "${BLD}" "${RST}" "${GREEN}"
-    printf '%s║  %s%s  2.%s Run Claude  → %sclaude%s                         ║%s\n' "${GREEN}" "${RST}" "${CYAN}" "${RST}" "${BLD}" "${RST}" "${GREEN}"
+    echo -e "${GREEN}║  ${RST}${CYAN}  1.${RST} Start proxy → ${BLD}claude-start-server${RST}${GREEN}            ║${RST}"
+    echo -e "${GREEN}║  ${RST}${CYAN}  2.${RST} Run Claude  → ${BLD}claude${RST}${GREEN}                         ║${RST}"
     printf '╚%s╝\n' "$line"
     echo -e "${RST}"
 }

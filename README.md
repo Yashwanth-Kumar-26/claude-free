@@ -19,67 +19,43 @@
 
 ---
 
----
 ## Quick Start
 
-### 1. Setup
+### 🐧 Linux / macOS
 
-Recommended: use the platform-specific setup scripts included in the repo.
-
-Linux / macOS (bash):
 ```bash
+git clone https://github.com/Yashwanth-Kumar-26/claude-free.git
+cd claude-free
 ./setup.sh
 ```
 
-Windows (PowerShell or CMD):
-```powershell
+### 🪟 Windows
+
+```cmd
+git clone https://github.com/Yashwanth-Kumar-26/claude-free.git
+cd claude-free
 .\setup.cmd
 ```
 
-These scripts create a virtual environment (./.venv or ./venv), install dependencies from requirements.txt or pyproject, and guide basic configuration (API keys, config.json). They are the preferred way to bootstrap the project on each platform.
+The setup script handles everything — just follow the prompts to pick a provider and enter your API key.
 
-If you prefer the Python installer path, the cross-platform `setup.py` still exists:
-```bash
-python setup.py
-```
-
-
-This guides you through:
-- Selecting a provider (OpenRouter, NVIDIA NIM, OpenCode, etc.)
-- Picking models for each tier (default/opus/sonnet/haiku)
-- Entering API keys
-- Setting `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_BASE_URL` env vars (first run only)
-
-### 2. Install Dependencies
-
-```bash
-pip install -e .
-```
-
-Or with `uv` (faster):
-```bash
-uv sync
-```
-
-> `pip install -e .` installs the package from `pyproject.toml` and makes the `claude-start-server` command available globally.
-
-### 3. Start Server
+After setup, **close the terminal** and open a new one. Then start the proxy:
 
 ```bash
 claude-start-server
 ```
 
-Or directly with python:
-```bash
-python server.py
-```
-
-### 4. Connect Claude
+In a **separate terminal**, go to your project directory and run Claude as usual:
 
 ```bash
 claude
 ```
-### 5. Network Exposure (Optional)
+
+Verify the connection with `/status` inside Claude Code CLI.
+
+### Network Exposure (Optional)
+
+Want to use Claude Code from another machine?
 
 ```bash
 python serverip.py
@@ -104,12 +80,12 @@ Instead of hardcoding backends one-by-one, why not leverage a dynamic provider r
 - **Eliminate vendor lock-in** (seamlessly swap providers)
 
 ### What You Get
-A single proxy that speaks Anthropic-compatible API on one side, and can route to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud ,, and 107+ others on the other side.
+A single proxy that speaks Anthropic-compatible API on one side, and can route to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud, and 107+ others on the other side.
 
 **One gateway. 115+ providers. Zero hardcoding.**
 
-
 >  **If you find claudefree useful, please give it a star ⭐ !** It helps the project grow and lets others discover it.
+
 ---
 
 ## Configuration
@@ -148,9 +124,8 @@ Edit `config.json` or re-run `python setup.py` to change:
 
 | File | Purpose |
 |------|---------|
-| `setup.py` | Cross-platform setup (all OS) |
-| `setup.sh` | Platform setup script (Linux/macOS) — run `./setup.sh` |
-| `setup.cmd` | Platform setup script (Windows) — run `\.\setup.cmd` |
+| `setup.sh` | Setup script for Linux/macOS |
+| `setup.cmd` | Setup script for Windows |
 | `claude-start-server` | Start script (bash) |
 | `claude-start-server.bat` | Start script (Windows) |
 | `config.json` | Provider and model configuration |
@@ -172,8 +147,8 @@ ClaudeFree routes requests through:
 ## Development
 
 ```bash
-# Install dependencies
-pip install -e .      # or: uv sync
-pytest tests/         # Run tests
-claude-start-server   # Start with logging
+# Install dependencies (uv is preferred)
+uv sync                # or: pip install -e .
+pytest tests/          # Run tests
+claude-start-server    # Start with logging
 ```

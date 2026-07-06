@@ -14,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ── ANSI Colors ──────────────────────────────────────────────────────────
+# ── ANSI Colors (use echo -e, not printf, for these) ────────────────────
 RST='\033[0m'; BLD='\033[1m'; DIM='\033[2m'
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'
@@ -26,6 +26,7 @@ COLS=$(tput cols 2>/dev/null || echo 80)
 # Portable repeat-char (no dependency on seq)
 repeat() { printf '%*s' "$1" '' | tr ' ' "$2"; }
 
+# Print helpers — use echo -e so \033 escape sequences work everywhere
 print_banner() {
     local line
     echo -e "${CYAN}"
@@ -43,17 +44,17 @@ print_banner() {
 
 print_step() {
     local num=$1 total=$2 desc=$3
-    printf "\n  ${BLUE}◉${RST} ${BLD}Step %s of %s${RST}  %s\n" "$num" "$total" "$desc"
+    echo -e "\n  ${BLUE}◉${RST} ${BLD}Step $num of $total${RST}  $desc"
 }
 
-print_ok()    { printf "  ${GREEN}✓${RST} %s\n" "$1"; }
-print_info()  { printf "  ${CYAN}ℹ${RST} %s\n" "$1"; }
-print_warn()  { printf "  ${YELLOW}⚠${RST} %s\n" "$1"; }
-print_err()   { printf "  ${RED}✗${RST} %s\n" "$1"; }
-print_sub()   { printf "    ${CYAN}⏳${RST} %s\n" "$1"; }
-print_sub_ok(){ printf "    ${GREEN}✓${RST} %s\n" "$1"; }
-print_sub_ko(){ printf "    ${RED}✗${RST} %s\n" "$1"; }
-print_divider(){ printf '  %s────────────────────────────────────%s\n' "${DIM}" "${RST}"; }
+print_ok()    { echo -e "  ${GREEN}✓${RST} $1"; }
+print_info()  { echo -e "  ${CYAN}ℹ${RST} $1"; }
+print_warn()  { echo -e "  ${YELLOW}⚠${RST} $1"; }
+print_err()   { echo -e "  ${RED}✗${RST} $1"; }
+print_sub()   { echo -e "    ${CYAN}⏳${RST} $1"; }
+print_sub_ok(){ echo -e "    ${GREEN}✓${RST} $1"; }
+print_sub_ko(){ echo -e "    ${RED}✗${RST} $1"; }
+print_divider(){ echo -e "  ${DIM}────────────────────────────────────${RST}"; }
 
 # ── Spinner for long operations ──────────────────────────────────────────
 # Usage: run_with_spinner "message" command [args...]
@@ -252,7 +253,7 @@ main() {
 
     if command -v uv &> /dev/null; then
         if [ -f "$SCRIPT_DIR/pyproject.toml" ]; then
-            if run_with_spinner "Running uv sync..." uv sync --project "$SCRIPT_DIR" --frozen; then
+            if run_with_spinner "Running uv sync..." uv sync --directory "$SCRIPT_DIR"; then
                 print_sub_ok "Dependencies installed via uv"
             else
                 print_warn "uv sync failed — falling back to pip install -e ."
@@ -347,30 +348,31 @@ main() {
 
     select_model() {
         local tier=$1
-        echo ""
-        echo -e "    ${BLUE}── Model for ${BLD}$tier${RST}${BLUE} ──${RST}"
-        echo -e "      ${DIM} 0${RST}) [SAME_AS_DEFAULT]"
-        echo -e "      ${DIM} 1${RST}) [CUSTOM_MODEL]"
+        # All display output goes to stderr — only the final choice goes to stdout
+        echo >&2 ""
+        echo >&2 -e "    ${BLUE}── Model for ${BLD}$tier${RST}${BLUE} ──${RST}"
+        echo >&2 -e "      ${DIM} 0${RST}) [SAME_AS_DEFAULT]"
+        echo >&2 -e "      ${DIM} 1${RST}) [CUSTOM_MODEL]"
 
         local shown=0
         for i in "${!MODEL_ARRAY[@]}"; do
             [ "$shown" -ge 10 ] && break
-            printf "      ${DIM}%2d${RST}) %s\n" "$((i+2))" "${MODEL_ARRAY[$i]}"
+            echo >&2 -e "      ${DIM}$((i+2))${RST}) ${MODEL_ARRAY[$i]}"
             ((shown++))
         done
-        [ "$MODEL_COUNT" -gt 10 ] && echo -e "      ${DIM}... and $((MODEL_COUNT-10)) more available${RST}"
+        [ "$MODEL_COUNT" -gt 10 ] && echo >&2 -e "      ${DIM}... and $((MODEL_COUNT-10)) more${RST}"
 
+        local choice="[SAME_AS_DEFAULT]"
         if command -v fzf &>/dev/null && [ -t 0 ]; then
-            echo -e "      ${DIM}(Type to filter, Enter to select)${RST}"
-            local choice
+            echo >&2 -e "      ${DIM}(Type to filter, Enter to select)${RST}"
             choice=$(printf "[SAME_AS_DEFAULT]\n[CUSTOM_MODEL]\n%s\n" "$MODELS" | fzf --prompt "  Search $tier > ")
         else
-            echo ""
-            printf '      %sSelection%s (0-%s): ' "${BLD}" "${RST}" "$((MODEL_COUNT+1))"
+            echo >&2 ""
+            printf '      %sSelection%s (0-%s): ' "${BLD}" "${RST}" "$((MODEL_COUNT+1))" >&2
             read -r n
             case "$n" in
                 0) choice="[SAME_AS_DEFAULT]" ;;
-                1) printf '      %sCustom name%s: ' "${BLD}" "${RST}"; read -r choice ;;
+                1) printf '      %sCustom name%s: ' "${BLD}" "${RST}" >&2; read -r choice ;;
                 *)
                     if [ "$n" -ge 2 ] && [ "$n" -lt $((MODEL_COUNT+2)) ]; then
                         choice="${MODEL_ARRAY[$((n-2))]}"

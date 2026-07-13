@@ -77,6 +77,8 @@ class OpenAICompatibleAdapter(DynamicBackendAdapter):
         Yields:
             Anthropic SSE format responses
         """
+        sse = None
+        message_started = False
         try:
             # Convert Anthropic messages to OpenAI format
             openai_messages = self._convert_to_openai_messages(messages, system)
@@ -129,6 +131,7 @@ class OpenAICompatibleAdapter(DynamicBackendAdapter):
                 heuristic_parser = ToolParser()
 
                 yield sse.message_start()
+                message_started = True
 
                 final_stop_reason = None
 
@@ -234,15 +237,28 @@ class OpenAICompatibleAdapter(DynamicBackendAdapter):
 
         except Exception as e:
             logger.error(f"Error in create_message: {e}")
-            # Properly close streaming protocol even on error
+            # Always emit a valid stream trailer, even if upstream failed before SSE init.
             try:
-                yield sse.content_block_stop(0)
-                yield sse.message_delta("end_turn", sse.estimate_output_tokens())
+                if sse is None:
+                    from engine.sse_builder import SSEBuilder
+
+                    msg_id = f"msg_dyn_{uuid.uuid4().hex[:8]}"
+                    sse = SSEBuilder(msg_id, self.model_id, input_tokens=input_tokens)
+
+                if not message_started:
+                    yield sse.message_start()
+
+                for event in sse.close_all_blocks():
+                    yield event
+                for event in sse.emit_error(str(e)):
+                    yield event
+
+                output_tokens = max(sse.estimate_output_tokens(), 1)
+                yield sse.message_delta("end_turn", output_tokens)
                 yield sse.message_stop()
             except Exception as format_err:
                 logger.error(f"Failed to format error response: {format_err}")
-                # Fall back to minimal valid event
-                yield sse.message_stop()
+                yield 'event: message_stop\ndata: {"type":"message_stop"}\n\n'
 
     def _convert_to_openai_messages(
         self, messages: list[dict[str, Any]], system: str | None = None

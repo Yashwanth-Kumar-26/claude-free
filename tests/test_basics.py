@@ -116,6 +116,58 @@ def test_shortcut_title_gen():
     assert maybe_title_gen(req5) is None
 
 
+def test_shortcut_suggestion_mode_requires_probe_shape():
+    from gateway.schemas import MessageParam, MessagesRequest
+    from gateway.shortcuts import maybe_suggestion_mode
+
+    # Probe-like request should be intercepted
+    req_probe = MessagesRequest(
+        model="test",
+        max_tokens=16,
+        messages=[MessageParam(role="user", content="does this model support suggestion mode?")],
+    )
+    assert maybe_suggestion_mode(req_probe) is not None
+
+    # Normal user prompt should not be intercepted
+    req_user = MessagesRequest(
+        model="test",
+        max_tokens=1024,
+        messages=[MessageParam(role="user", content="Can you provide a suggestion to optimize this function?")],
+    )
+    assert maybe_suggestion_mode(req_user) is None
+
+
+def test_shortcut_prefix_detect_requires_probe_shape():
+    from gateway.schemas import MessageParam, MessagesRequest
+    from gateway.shortcuts import maybe_prefix_detect
+
+    # Probe-like request should be intercepted
+    req_probe = MessagesRequest(
+        model="test",
+        max_tokens=16,
+        messages=[
+            MessageParam(
+                role="user",
+                content='Complete this prefix: {"type":"human_turn"}',
+            )
+        ],
+    )
+    assert maybe_prefix_detect(req_probe) is not None
+
+    # Normal request with JSON snippets should not be intercepted
+    req_user = MessagesRequest(
+        model="test",
+        max_tokens=1024,
+        messages=[
+            MessageParam(
+                role="user",
+                content='Please explain this JSON schema {"type":"object","properties":{"name":{"type":"string"}}}',
+            )
+        ],
+    )
+    assert maybe_prefix_detect(req_user) is None
+
+
 def test_model_selector_resolve():
     from gateway.selector import ModelSelector
     from settings.env import Settings

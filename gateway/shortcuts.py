@@ -32,6 +32,24 @@ def _last_user_text(req: MessagesRequest) -> str:
     return ""
 
 
+def _is_probe_request(req: MessagesRequest, *, max_user_chars: int = 280) -> bool:
+    """Heuristic gate so shortcuts only trigger on tiny capability probes."""
+    if len(req.messages) != 1:
+        return False
+    msg = req.messages[0]
+    if msg.role != "user":
+        return False
+    if req.tools:
+        return False
+    if req.system not in (None, "", []):
+        return False
+    if req.thinking not in (None, {}):
+        return False
+    if req.max_tokens is not None and req.max_tokens > 64:
+        return False
+    return len(_last_user_text(req)) <= max_user_chars
+
+
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
@@ -77,10 +95,10 @@ _QUOTA_PROBES = frozenset(
 
 def maybe_quota_probe(req: MessagesRequest) -> Iterator[str] | None:
     """Return a shortcut reply for Claude Code startup quota probes."""
-    if len(req.messages) > 2:
+    if not _is_probe_request(req, max_user_chars=32):
         return None
     txt = _last_user_text(req).strip().lower()
-    if txt in _QUOTA_PROBES or (len(txt) < 10 and not any(c in txt for c in "?!.\n")):
+    if txt in _QUOTA_PROBES:
         logger.debug("SHORTCUT: quota probe intercepted")
         return _simple_stream(req.model, "Hello. How can I help?", input_tokens=5)
     return None
@@ -98,6 +116,8 @@ _TITLE_PATTERN = re.compile(
 
 
 def maybe_title_gen(req: MessagesRequest) -> Iterator[str] | None:
+    if not _is_probe_request(req):
+        return None
     txt = _last_user_text(req)
     if _TITLE_PATTERN.search(txt):
         logger.debug("SHORTCUT: title generation intercepted")
@@ -109,13 +129,14 @@ def maybe_title_gen(req: MessagesRequest) -> Iterator[str] | None:
 # Claude Code checks if the model supports suggestion mode.
 
 _SUGGESTION_PATTERN = re.compile(
-    r"suggestion\s+mode|mode.*suggestion|rewrite.*suggestion|"
-    r"can\s+you\s+(?:provide|give|make)\s+(?:a\s+)?suggestion",
+    r"suggestion\s+mode|mode.*suggestion|supports?\s+.*suggestion",
     re.IGNORECASE,
 )
 
 
 def maybe_suggestion_mode(req: MessagesRequest) -> Iterator[str] | None:
+    if not _is_probe_request(req):
+        return None
     txt = _last_user_text(req)
     if _SUGGESTION_PATTERN.search(txt):
         logger.debug("SHORTCUT: suggestion mode intercepted")
@@ -133,6 +154,8 @@ _FILEPATH_PATTERN = re.compile(
 
 
 def maybe_filepath_extract(req: MessagesRequest) -> Iterator[str] | None:
+    if not _is_probe_request(req):
+        return None
     txt = _last_user_text(req)
     if _FILEPATH_PATTERN.search(txt):
         logger.debug("SHORTCUT: filepath extraction intercepted")
@@ -153,11 +176,20 @@ _PREFIX_MARKERS = (
 
 
 def maybe_prefix_detect(req: MessagesRequest) -> Iterator[str] | None:
+    if not _is_probe_request(req):
+        return None
     txt = _last_user_text(req)
-    if all(m.lower() not in txt.lower() for m in _PREFIX_MARKERS):
+    ltxt = txt.lower()
+    if all(m.lower() not in ltxt for m in _PREFIX_MARKERS):
+        return None
+    if not any(cue in ltxt for cue in ("prefix", "complete", "continue")):
+        return None
+    has_turn_marker = '"human_turn"' in ltxt or '"assistant_turn"' in ltxt
+    has_format_marker = '{"type":"' in ltxt or "human:" in ltxt or "<human>" in ltxt
+    if not (has_turn_marker and has_format_marker):
         return None
     logger.debug("SHORTCUT: prefix detection intercepted")
-    return _simple_stream(req.model, '{"type":"human_turn"}', input_tokens=5)
+    return _simple_stream(req.model, '{"type":"assistant_turn"}', input_tokens=5)
 
 
 # ── composite shortcut handler ────────────────────────────────────────────────

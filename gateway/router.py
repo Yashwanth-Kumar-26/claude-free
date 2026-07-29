@@ -105,11 +105,8 @@ async def create_message(
         logger.info("Cancelled previous in-flight stream (Esc+edit) rid={}", rid)
 
     async def _event_stream() -> AsyncIterator[bytes]:
-        # When this request supersedes a previous one (Esc+edit), skip the
-        # initial is_disconnected() check — the ASGI connection state can
-        # appear disconnected on a pipelined POST but the client IS alive.
-        # For a genuine fresh request, check before starting the backend.
-        if prev_event is None and await request.is_disconnected():
+        # Check disconnection before starting the backend request.
+        if await request.is_disconnected():
             logger.info("STREAM DONE before start rid={}", rid)
             await _in_flight.unregister(request)
             return
@@ -137,17 +134,10 @@ async def create_message(
             raise
         finally:
             await _in_flight.unregister(request)
-            if cancelled:
-                # Unblock the response quickly: close the backend connection in
-                # the background with a short timeout so it cannot delay the
-                # next request's response.
-                close_task = asyncio.create_task(stream.aclose())
-                try:
-                    await asyncio.wait_for(close_task, timeout=2.0)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pass
-            else:
-                await stream.aclose()
+            # Explicitly close the whole adapter chain.  This closes httpx
+            # streaming responses too, so a cancelled turn cannot continue
+            # consuming the old prompt in the background.
+            await stream.aclose()
             logger.info(
                 "STREAM {}: chunks={} elapsed={:.2f}s rid={}",
                 "CANCELLED" if cancelled else "DONE",

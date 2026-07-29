@@ -5,8 +5,10 @@
 ![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi)
 ![uv](https://img.shields.io/badge/uv-Package_Manager-purple?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-important?style=for-the-badge)
 
 ![Linux](https://img.shields.io/badge/Linux-Supported-black?style=for-the-badge&logo=linux)
+![macOS](https://img.shields.io/badge/macOS-Supported-white?style=for-the-badge&logo=apple)
 ![Windows](https://img.shields.io/badge/Windows-Compatible-0078D6?style=for-the-badge&logo=windows)
 ![Repo Size](https://img.shields.io/github/repo-size/Yashwanth-Kumar-26/claude-free?style=for-the-badge)
 ![Visitors](https://visitor-badge.laobi.icu/badge?page_id=Yashwanth-Kumar-26.claude-free)
@@ -21,7 +23,7 @@
 
 ## Quick Start
 
-Run the single **cross-platform** setup — works on Linux, macOS, and Windows:
+Run the single **cross-platform** setup — works on Linux 🐧, macOS 🍎, and Windows 🪟:
 
 ```bash
 git clone https://github.com/Yashwanth-Kumar-26/claude-free.git

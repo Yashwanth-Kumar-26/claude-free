@@ -21,46 +21,24 @@
 
 ## Quick Start
 
-### 🐧 Linux / macOS
+Run the single **cross-platform** setup — works on Linux, macOS, and Windows:
 
 ```bash
 git clone https://github.com/Yashwanth-Kumar-26/claude-free.git
 cd claude-free
-./setup.sh
+python setup.py
 ```
 
-### 🪟 Windows
+The setup handles everything
 
-```cmd
-git clone https://github.com/Yashwanth-Kumar-26/claude-free.git
-cd claude-free
-.\setup.cmd
-```
-
-The setup script handles everything — just follow the prompts to pick a provider and enter your API key.
-
-After setup, **close the terminal** and open a new one. Then start the proxy:
+Then start the proxy and Claude in separate terminals:
 
 ```bash
-claude-start-server
+claude-start-server   # terminal 1
+claude                # terminal 2 | in your project
 ```
 
-In a **separate terminal**, go to your project directory and run Claude as usual:
-
-```bash
-claude
-```
-
-Verify the connection with `/status` inside Claude Code CLI.
-
-### Network Exposure (Optional)
-
-Want to use Claude Code from another machine?
-
-```bash
-python serverip.py
-```
-
+Verify with `/status` inside Claude Code CLI.
 ---
 
 ## Why claudefree?
@@ -124,15 +102,11 @@ Edit `config.json` or re-run `python setup.py` to change:
 
 | File | Purpose |
 |------|---------|
-| `setup.sh` | Setup script for Linux/macOS |
-| `setup.cmd` | Setup script for Windows |
+| `setup.py` | **Cross-platform** |
 | `claude-start-server` | Start script (bash) |
 | `claude-start-server.bat` | Start script (Windows) |
 | `config.json` | Provider and model configuration |
 | `.env` | API keys and secrets |
-| `serverip.py` | Network IP exposure utility |
-| `Arch.md` | Architecture documentation |
-
 ---
 
 ## Architecture
@@ -152,3 +126,13 @@ uv sync                # or: pip install -e .
 pytest tests/          # Run tests
 claude-start-server    # Start with logging
 ```
+
+## Contributing
+
+Contributions and issues are welcome! If you'd like to contribute, feel free to open a PR or report an issue.
+
+---
+
+<div align="center">
+  Made with ❤️ by <a href="https://github.com/Yashwanth-Kumar-26">Yashwanth-Kumar-26</a> & <a href="https://github.com/saiadarsh-03">saiadarsh-03</a>
+</div>

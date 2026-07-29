@@ -204,7 +204,7 @@ async def test_cancelled_client_does_not_start_backend_stream():
 
     class Request:
         def __init__(self):
-            self.headers = {"authorization": "Bearer test-key-1"}
+            self.headers = {}
             self.app = SimpleNamespace(state=SimpleNamespace(service=service))
 
         async def is_disconnected(self):
@@ -228,7 +228,7 @@ async def test_client_disconnect_closes_active_backend_stream():
 
     class Request:
         def __init__(self):
-            self.headers = {"authorization": "Bearer test-key-2"}
+            self.headers = {}
             self.disconnected = False
 
         async def is_disconnected(self):

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from collections.abc import AsyncIterator
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from loguru import logger
 
 from .auth import require_auth
@@ -29,59 +27,6 @@ def _get_service(request: Request) -> GatewayService:
     return request.app.state.service
 
 
-# ── per-client in-flight tracker ─────────────────────────────────────────────
-
-class _InFlight:
-    """Track the single in-flight SSE request per API-key client.
-
-    When a new POST arrives from the same client, the previous in-flight
-    stream is cancelled so the upstream backend stops processing the old
-    prompt.  This is the only reliable way to handle Esc+edit: Claude Code
-    keeps the old TCP connection alive (so ``send()`` never fails), sends
-    the new POST on a fresh connection, and would otherwise have the new
-    request silently queued behind the old SSE stream on its side.
-    """
-
-    def __init__(self) -> None:
-        self._lock = asyncio.Lock()
-        self._in_flight: dict[str, asyncio.Event] = {}  # client_key → cancel event
-
-    @staticmethod
-    def _client_key(request: Request) -> str:
-        """Derive a stable client key from Authorization header."""
-        auth = request.headers.get("authorization", "") or request.headers.get(
-            "x-api-key", ""
-        )
-        return hashlib.sha256(auth.encode()).hexdigest()[:16]
-
-    async def register(
-        self, request: Request, cancel: asyncio.Event
-    ) -> asyncio.Event | None:
-        """Register an in-flight stream for this client.
-
-        Returns the *previous* cancel event if one was active (caller
-        should signal it), or *None* if no previous existed.
-        """
-        key = self._client_key(request)
-        async with self._lock:
-            prev = self._in_flight.get(key)
-            self._in_flight[key] = cancel
-        return prev
-
-    async def unregister(self, request: Request) -> None:
-        """Remove the in-flight entry for this client."""
-        key = self._client_key(request)
-        async with self._lock:
-            self._in_flight.pop(key, None)
-
-    @property
-    def active_count(self) -> int:
-        return len(self._in_flight)
-
-
-_in_flight = _InFlight()
-
-
 # ── /v1/messages ─────────────────────────────────────────────────────────────
 
 
@@ -97,18 +42,12 @@ async def create_message(
     svc = _get_service(request)
     rid = request.headers.get("x-request-id") or request.headers.get("request-id")
 
-    # ── cancel any previous in-flight stream for this client ──
-    cancel_prev = asyncio.Event()
-    prev_event = await _in_flight.register(request, cancel_prev)
-    if prev_event is not None:
-        prev_event.set()
-        logger.info("Cancelled previous in-flight stream (Esc+edit) rid={}", rid)
-
     async def _event_stream() -> AsyncIterator[bytes]:
-        # Check disconnection before starting the backend request.
+        # Claude Code cancels an in-flight turn when Esc is pressed.  Make the
+        # downstream connection authoritative: do not start (or keep) an
+        # expensive upstream request after the client has gone away.
         if await request.is_disconnected():
-            logger.info("STREAM DONE before start rid={}", rid)
-            await _in_flight.unregister(request)
+            logger.info("STREAM CANCELLED before start rid={}", rid)
             return
 
         t0 = time.monotonic()
@@ -116,24 +55,18 @@ async def create_message(
         cancelled = False
         stream = svc.stream(body, request_id=rid)
         try:
-            # ── streaming loop — check all abort conditions per chunk ──
             async for chunk in stream:
-                if cancel_prev.is_set():
-                    cancelled = True
-                    logger.info("STREAM DONE: superseded by new prompt rid={}", rid)
-                    return
                 if await request.is_disconnected():
                     cancelled = True
-                    logger.info("STREAM DONE by client rid={}", rid)
+                    logger.info("STREAM CANCELLED by client rid={}", rid)
                     return
                 yield chunk.encode("utf-8")
                 chunks += 1
         except asyncio.CancelledError:
             cancelled = True
-            logger.info("STREAM DONE by client rid={}", rid)
+            logger.info("STREAM CANCELLED by client rid={}", rid)
             raise
         finally:
-            await _in_flight.unregister(request)
             # Explicitly close the whole adapter chain.  This closes httpx
             # streaming responses too, so a cancelled turn cannot continue
             # consuming the old prompt in the background.

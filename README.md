@@ -15,7 +15,7 @@
 
 ---
 
-**claudefree** is an Anthropic-compatible gateway that routes Claude Code to **115+ LLM backends**, powered by dynamic provider discovery from [models.dev](https://github.com/anomalyco/models.dev).
+**claudefree** is an Anthropic-compatible gateway that routes Claude Code to **150+ LLM backends**, powered by dynamic provider discovery from [models.dev](https://github.com/anomalyco/models.dev).
 
 ---
 
@@ -37,8 +37,8 @@ Then start the proxy and Claude in separate terminals:
 claude-start-server   # terminal 1
 claude                # terminal 2 | in your project
 ```
+>  **If you find claudefree useful, please give it a star ⭐ !** It helps the project grow and lets others discover it.
 
-Verify with `/status` inside Claude Code CLI.
 ---
 
 ## Why claudefree?
@@ -49,7 +49,7 @@ Claude Code CLI is powerful, but it's bound to Anthropic's API. Using Claude wit
 ### The Discovery
 While researching Claude Code integration, I found OpenRouter's [cookbook guide](https://openrouter.ai/docs/cookbook/coding-agents/claude-code-integration) showing a simple pattern: **set a base URL and Claude routes to any Anthropic-compatible provider**. 
 
-But then I discovered something better: **[models.dev](https://github.com/anomalyco/models.dev)** — an open-source catalog of 115+ LLM providers and their capabilities, maintained by the community.
+But then I discovered something better: **[models.dev](https://github.com/anomalyco/models.dev)** — an open-source catalog of 150+ LLM providers and their capabilities, maintained by the community.
 
 ### The Insight
 Instead of hardcoding backends one-by-one, why not leverage a dynamic provider registry? This single decision became claudefree's core: 
@@ -58,12 +58,9 @@ Instead of hardcoding backends one-by-one, why not leverage a dynamic provider r
 - **Eliminate vendor lock-in** (seamlessly swap providers)
 
 ### What You Get
-A single proxy that speaks Anthropic-compatible API on one side, and can route to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud, and 107+ others on the other side.
+A single proxy that speaks Anthropic-compatible API on one side, and can route to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud, and 150+ others on the other side.
 
-**One gateway. 115+ providers. Zero hardcoding.**
-
->  **If you find claudefree useful, please give it a star ⭐ !** It helps the project grow and lets others discover it.
-
+**One gateway. 150+ providers. Zero hardcoding.**
 ---
 
 ## Configuration

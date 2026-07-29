@@ -38,6 +38,7 @@ class S:
     BLU = "\033[34m"
     MAG = "\033[35m"
     CYN = "\033[36m"
+    SAF = "\033[38;5;214m"  # saffron / orange (256-color)
 
 # ── Print helpers ────────────────────────────────────────────────────────
 
@@ -46,10 +47,11 @@ COLS = min(COLS, 80)
 
 
 def print_banner() -> None:
-    """Render the box-drawn header banner."""
-    print(f"{S.CYN}")
-    print(f"╔{S.CYN}{'═' * (COLS - 2)}╗")
-    print(f"║{S.CYN}{' ' * (COLS - 2)}║")
+    """Render the box-drawn header banner in saffron."""
+    c = S.SAF
+    print(f"{c}")
+    print(f"╔{c}{'═' * (COLS - 2)}╗")
+    print(f"║{c}{' ' * (COLS - 2)}║")
     line = "✨ claudefree Setup ✨"
     pad = (COLS - 2 - len(line)) // 2
     print(f"║{' ' * pad}{line}{' ' * (COLS - 2 - pad - len(line))}║")
@@ -57,7 +59,7 @@ def print_banner() -> None:
     pad = (COLS - 2 - len(line)) // 2
     print(f"║{' ' * pad}{line}{' ' * (COLS - 2 - pad - len(line))}║")
     print(f"║{''.ljust(COLS - 2)}║")
-    print(f"╚{S.CYN}{'═' * (COLS - 2)}╝")
+    print(f"╚{c}{'═' * (COLS - 2)}╝")
     print(f"{S.RST}")
 
 
@@ -67,6 +69,14 @@ def print_step(n: int, total: int, desc: str) -> None:
 
 def _print(sym: str, color: str, msg: str) -> None:
     print(f"  {msg} {color}{sym}{S.RST}")
+
+
+def _clr() -> None:
+    """Clear the current terminal line (works on all terminals)."""
+    # Write spaces to cover the full line width before carriage return.
+    # \033[2K is not reliable on every terminal, so we brute-force overwrite.
+    sys.stdout.write(f"\r{'':{COLS}}\r")
+    sys.stdout.flush()
 
 
 def ok(msg: str) -> None:
@@ -109,11 +119,19 @@ def divider() -> None:
 
 # ── Spinner ──────────────────────────────────────────────────────────────
 
-_SPINNER_CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠏⠎"
+_SPINNER_CHARS = ["◕‿◕", "◕ᴗ◕", "◕◡◕", "◕‿◕✿", "≧◡≦", "＾▽＾"]
+_ANIME_FRAMES = [
+    "◕‿◕",
+    "◕ᴗ◕",
+    "◕◡◕",
+    "◕‿◕✿",
+    "≧◡≦",
+    "＾▽＾",
+]
 
 
 class Spinner:
-    """Thread-based spinner for long operations."""
+    """Thread-based spinner with anime faces for long operations."""
 
     def __init__(self, msg: str = ""):
         self.msg = msg
@@ -139,19 +157,23 @@ class Spinner:
         if self._thread is not None:
             self._thread.join()
             self._thread = None
+        _clr()
         sym = "✓" if success else "✗"
         color = S.GRN if success else S.RED
-        sys.stdout.write(f"\r    {self.msg} {color}{sym}{S.RST}\n")
+        sys.stdout.write(f"    {self.msg} {color}{sym}{S.RST}\n")
         sys.stdout.flush()
 
     def _spin(self) -> None:
         i = 0
         while self._running:
-            ch = _SPINNER_CHARS[i % len(_SPINNER_CHARS)]
-            sys.stdout.write(f"\r    {S.CYN}{ch}{S.RST} {self.msg}")
+            face = _SPINNER_CHARS[i % len(_SPINNER_CHARS)]
+            _clr()
+            # Center the face in a fixed-width slot so the message text stays
+            # in place regardless of face width (CJK chars vary in columns).
+            sys.stdout.write(f"  {S.CYN}{face:^4}{S.RST}  {self.msg}")
             sys.stdout.flush()
             i += 1
-            self._spin_sleep(0.1)
+            self._spin_sleep(0.2)
 
     @staticmethod
     def _spin_sleep(secs: float) -> None:
@@ -208,6 +230,12 @@ def fuzzy_select(options: list[str], prompt: str = "Search", **kwargs: str) -> s
             )
         if result.returncode == 0:
             return result.stdout.strip()
+        # fzf was killed by Ctrl+C (exit 130 on Unix, -2 on Windows).
+        # Do NOT fall back to numbered menu — abort setup cleanly.
+        if result.returncode in (-2, 130):
+            _clr()
+            print(f"  Setup cancelled by user {S.YLW}⚠{S.RST}")
+            sys.exit(1)
     except (FileNotFoundError, OSError) as exc:
         warn(f"fzf/fzy error: {exc}")
     finally:
@@ -230,7 +258,9 @@ def numbered_menu(options: list[str], prompt: str = "") -> str | None:
         if 0 <= idx < len(options):
             return options[idx]
     except (ValueError, EOFError, KeyboardInterrupt):
-        pass
+        _clr()
+        print(f"  Setup cancelled by user {S.YLW}⚠{S.RST}")
+        sys.exit(1)
     return None
 
 
@@ -377,6 +407,54 @@ def _download_with_progress(url: str, dest: Path, chunk_size: int = 65536) -> bo
         return True
     except Exception:
         return False
+
+
+def _install_uv() -> bool:
+    """Install uv package manager (cross-platform)."""
+    if _check_cmd("uv"):
+        return True
+
+    # Linux / macOS: official install script
+    if sys.platform in ("linux", "darwin"):
+        if _download_with_progress(
+            "https://astral.sh/uv/install.sh",
+            SCRIPT_DIR / ".uv-install.sh",
+        ):
+            ok = _run_cmd(
+                "Installing uv...",
+                ["sh", str(SCRIPT_DIR / ".uv-install.sh")],
+                timeout=120,
+            )
+            try:
+                (SCRIPT_DIR / ".uv-install.sh").unlink()
+            except OSError:
+                pass
+            if ok:
+                return True
+
+    # Windows: official install script
+    if sys.platform == "win32":
+        ok = _run_cmd(
+            "Installing uv...",
+            [
+                "powershell", "-ExecutionPolicy", "ByPass",
+                "-c", "irm https://astral.sh/uv/install.ps1 | iex",
+            ],
+            timeout=120,
+        )
+        if ok:
+            return True
+
+    # Fallback: pip install
+    if _check_cmd("pip"):
+        return _run_cmd(
+            "Installing uv via pip...",
+            [sys.executable, "-m", "pip", "install", "uv"],
+            timeout=120,
+        )
+
+    sub_warn("Could not install uv — some features may not work")
+    return False
 
 
 def _install_fzf() -> bool:
@@ -596,7 +674,9 @@ def pick_models(providers: dict, provider: str) -> dict[str, str]:
             if 0 <= idx < len(model_names):
                 return model_names[idx]
         except (ValueError, EOFError, KeyboardInterrupt):
-            pass
+            _clr()
+            print(f"  Setup cancelled by user {S.YLW}⚠{S.RST}")
+            sys.exit(1)
         warn("Invalid — using [SAME_AS_DEFAULT]")
         return "[SAME_AS_DEFAULT]"
 
@@ -992,29 +1072,54 @@ def check_claude_cli() -> None:
 
 
 def show_summary(provider: str, models: dict[str, str]) -> None:
-    """Render the final summary dashboard."""
-    w = COLS - 4
-    print(f"\n{S.GRN}")
-    print(f"╔{'═' * (COLS - 2)}╗")
+    """Render the final summary dashboard in saffron."""
+    I = COLS - 2  # inner width between box walls
+
+    def _clean(s: str) -> str:
+        """Remove ANSI escape sequences for visible-width calculation."""
+        import re
+        return re.sub(r"\033\[[0-9;]*m", "", s)
+
+    def _box(line: str) -> str:
+        return f"║{line}{' ' * (I - len(_clean(line)))}║"
+
+    c = S.SAF
+    print(f"\n{c}")
+    print(f"╔{'═' * I}╗")
+
+    # Title
     label = "Setup Complete ✓"
-    pad = (COLS - 2 - len(label)) // 2
-    print(f"║{' ' * pad}{S.BLD}{S.GRN}{label}{S.RST}{S.GRN}{' ' * (COLS - 2 - pad - len(label))}║")
-    print(f"╠{'═' * (COLS - 2)}╣")
+    pad = (I - len(label)) // 2
+    print(f"║{' ' * pad}{S.BLD}{c}{label}{S.RST}{c}{' ' * (I - pad - len(label))}║")
+    print(f"╠{'═' * I}╣")
+
+    # Model rows
     for key, val in [("Provider", provider),
-                     ("Default Model", models["DEFAULT"]),
-                     ("Opus Model", models["OPUS"]),
-                     ("Sonnet Model", models["SONNET"]),
-                     ("Haiku Model", models["HAIKU"])]:
-        print(f"║  {S.BLD}{key:<19}{S.RST}{S.GRN} {val:{w}}{S.RST}{S.GRN}║")
-    print(f"╠{'═' * (COLS - 2)}╣")
-    print(f"║  {S.DIM}Config  {S.RST}{S.GRN} {CONFIG_FILE!s:{w - 8}}{S.RST}{S.GRN}║")
-    print(f"║  {S.DIM}Secrets {S.RST}{S.GRN} {ENV_FILE!s:{w - 8}}{S.RST}{S.GRN}║")
-    print(f"╠{'═' * (COLS - 2)}╣")
-    print(f"║  {S.BLD}Next Steps:{S.RST}{S.GRN}{' ' * (COLS - 12)}║{S.RST}")
-    print(f"║  {S.CYN}1.{S.RST} Start proxy → {S.BLD}claude-start-server{S.RST}{S.GRN}{' ' * 9}║{S.RST}")
-    print(f"║  {S.CYN}2.{S.RST} Run Claude  → {S.BLD}claude{S.RST}{S.GRN}{' ' * 14}║{S.RST}")
-    print(f"╚{'═' * (COLS - 2)}╝")
+                     ("Default", models["DEFAULT"]),
+                     ("Opus", models["OPUS"]),
+                     ("Sonnet", models["SONNET"]),
+                     ("Haiku", models["HAIKU"])]:
+        row = f"  {S.BLD}{key:<10}{S.RST}{c}  {val}"
+        print(_box(row))
+
+    print(f"╠{'═' * I}╣")
+
+    # Paths
+    for label, path in [("Config", str(CONFIG_FILE)), ("Secrets", str(ENV_FILE))]:
+        row = f"  {S.DIM}{label:<7}{S.RST}{c}  {path}"
+        print(_box(row))
+
+    print(f"╠{'═' * I}╣")
+
+    # Next steps
+    print(_box(f"  {S.BLD}Next Steps:{S.RST}"))
+    print(_box(f"  {S.CYN}1.{S.RST}  Start proxy  →  {S.BLD}claude-start-server{S.RST}"))
+    print(_box(f"  {S.CYN}2.{S.RST}  Run Claude   →  {S.BLD}claude{S.RST}"))
+
+    print(f"╚{'═' * I}╝")
     print(f"{S.RST}")
+
+
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
@@ -1032,7 +1137,7 @@ def main() -> None:
     else:
         info("Shell env not configured — will configure at the end")
 
-    TOTAL = 5
+    TOTAL = 6
 
     # ── Step 1: Prerequisites ────────────────────────────────────────────
     print_step(1, TOTAL, "Checking prerequisites")
@@ -1053,11 +1158,25 @@ def main() -> None:
     uv_ok = _check_cmd("uv")
     if uv_ok:
         sub_ok("uv found")
+    else:
+        _install_uv()
+        # Re-check after install
+        uv_ok = _check_cmd("uv")
+        if uv_ok:
+            sub_ok("uv ready")
+        else:
+            sub_warn("uv not available — skipping dependency install")
 
     _install_fzf()
 
-    # Refresh fuzzy detection after install attempt
-    _HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe"))
+    # Refresh fuzzy detection — fzf might have been installed to
+    # ~/.local/bin which isn't always in $PATH on first run.
+    _fzf_local = str(_HOME_BIN / ("fzf.exe" if sys.platform == "win32" else "fzf"))
+    _HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe") or Path(_fzf_local).is_file())
+    if _HAS_FZF:
+        # Ensure it's on PATH for subprocess calls
+        os.environ.setdefault("PATH", "")
+        os.environ["PATH"] = str(_HOME_BIN) + os.pathsep + os.environ["PATH"]
     _FUZZY_CMD = "fzf" if _HAS_FZF else None
 
     if _HAS_FZF:
@@ -1065,25 +1184,39 @@ def main() -> None:
     else:
         sub_warn("no fzf — using numbered menu")
 
-    # ── Step 2: Fetch providers ──────────────────────────────────────────
-    print_step(2, TOTAL, "Fetching providers from models.dev")
+    # ── Step 2: Install dependencies ─────────────────────────────────────
+    print_step(2, TOTAL, "Downloading dependencies")
+    download_msg = "uv sync" if uv_ok else "pip install"
+    if uv_ok:
+        _run_cmd(download_msg, ["uv", "sync"], timeout=300)
+    else:
+        # Fallback: pip install
+        if _check_cmd("pip"):
+            _run_cmd(download_msg,
+                     [sys.executable, "-m", "pip", "install", "-e", "."],
+                     timeout=300)
+        else:
+            sub_warn("no uv or pip — dependencies not installed")
+
+    # ── Step 3: Fetch providers ──────────────────────────────────────────
+    print_step(3, TOTAL, "Fetching providers from models.dev")
     providers = fetch_providers()
 
-    # ── Step 3: Select provider + API key ────────────────────────────────
-    print_step(3, TOTAL, "Select provider and enter API key")
+    # ── Step 4: Select provider + API key ────────────────────────────────
+    print_step(4, TOTAL, "Select provider and enter API key")
     print()
 
     provider = pick_provider(providers)
     api_key = collect_api_key(provider)
 
-    # ── Step 4: Select models ────────────────────────────────────────────
+    # ── Step 5: Select models ────────────────────────────────────────────
     print()
-    print_step(4, TOTAL, "Select models per tier")
+    print_step(5, TOTAL, "Select models per tier")
     models = pick_models(providers, provider)
 
-    # ── Step 5: Save & finalize ──────────────────────────────────────────
+    # ── Step 6: Save & finalize ──────────────────────────────────────────
     print()
-    print_step(5, TOTAL, "Saving configuration")
+    print_step(6, TOTAL, "Saving configuration")
     save_config(provider, api_key, models)
 
     setup_shell_env(rc, already_configured)
@@ -1095,8 +1228,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n  Setup cancelled by user {S.YLW}⚠{S.RST}")
+    import signal
+
+    def _on_ctrlc(sig: int, frame: object) -> None:
+        _clr()
+        print(f"  Setup cancelled by user {S.YLW}⚠{S.RST}")
         sys.exit(1)
+
+    signal.signal(signal.SIGINT, _on_ctrlc)
+    main()

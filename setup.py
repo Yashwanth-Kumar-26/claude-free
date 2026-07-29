@@ -74,7 +74,7 @@ def ok(msg: str) -> None:
 
 
 def info(msg: str) -> None:
-    _print("ℹ", S.CYN, msg)
+    print(f"  {msg}")
 
 
 def warn(msg: str) -> None:
@@ -678,14 +678,11 @@ def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
         sys.exit(1)
 
     spinner.stop(success=True)
-    info(f"Config:  {S.DIM}{CONFIG_FILE}{S.RST}")
-    info(f"Secrets: {S.DIM}{ENV_FILE}{S.RST}")
 
 
 def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
     """Add ANTHROPIC_* environment variables to shell rc (or Windows registry)."""
     if already_configured:
-        info("Shell environment already configured — skipped")
         return
 
     if sys.platform == "win32":

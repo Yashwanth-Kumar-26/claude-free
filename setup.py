@@ -74,7 +74,8 @@ def ok(msg: str) -> None:
 
 
 def info(msg: str) -> None:
-    _print("ℹ", S.CYN, msg)
+    # No prefix — keep output clean.  Errors still carry ✗ via error().
+    print(f"  {msg}")
 
 
 def warn(msg: str) -> None:
@@ -160,15 +161,8 @@ class Spinner:
 
 # ── Terminal selection helpers ───────────────────────────────────────────
 
-_HAS_FZF = bool(shutil.which("fzf"))
-_HAS_FZY = bool(shutil.which("fzy"))
-
-if _HAS_FZF:
-    _FUZZY_CMD = "fzf"
-elif _HAS_FZY:
-    _FUZZY_CMD = "fzy"
-else:
-    _FUZZY_CMD = None
+_HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe"))
+_FUZZY_CMD = "fzf" if _HAS_FZF else None
 
 
 def _use_fuzzy() -> bool:
@@ -176,25 +170,51 @@ def _use_fuzzy() -> bool:
 
 
 def fuzzy_select(options: list[str], prompt: str = "Search", **kwargs: str) -> str | None:
-    """Use fzf/fzy to let the user filter-select from options."""
+    """Use fzf/fzy to let the user filter-select from options.
+
+    Writes options to a temp file first so fzf's stdin remains usable for
+    keyboard input (avoids ``/dev/tty`` issues in remote/container terminals
+    like Glitch where piped stdin breaks fzf's interactive mode).
+    """
     if not _use_fuzzy():
         return None
     input_str = "\n".join(options)
-    if _FUZZY_CMD == "fzy":
-        args = ["fzy", "-p", f"{prompt}> "]
-    else:
-        args = ["fzf", "--prompt", f"{prompt}> "]
-        for flag, val in kwargs.items():
-            args.extend([f"--{flag.replace('_', '-')}", val])
+
+    # Write options to a temp file — fzf reads items from this, while
+    # opening /dev/tty directly for keyboard (only works when stdin isn't
+    # already consumed by a pipe from subprocess.run(input=...)).
+    import tempfile
+    import os as _os
+    tmp = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".fzf-input")
     try:
-        result = subprocess.run(
-            args, input=input_str, capture_output=True, text=True,
-            timeout=30,
-        )
+        tmp.write(input_str)
+        tmp.close()
+
+        args: list[str]
+        if _FUZZY_CMD == "fzy":
+            args = ["fzy", "-p", f"{prompt}> "]
+        else:
+            args = ["fzf", "--prompt", f"{prompt}> "]
+            for flag, val in kwargs.items():
+                args.extend([f"--{flag.replace('_', '-')}", val])
+
+        with open(tmp.name, "r") as fh:
+            # timeout=None means fzf stays open until the user selects or
+            # cancels — no artificial timeout on an interactive TUI.
+            result = subprocess.run(
+                args, stdin=fh,
+                stdout=subprocess.PIPE,
+                text=True,
+            )
         if result.returncode == 0:
             return result.stdout.strip()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    except (FileNotFoundError, OSError) as exc:
+        warn(f"fzf/fzy error: {exc}")
+    finally:
+        try:
+            _os.unlink(tmp.name)
+        except (OSError, NameError):
+            pass
     return None
 
 
@@ -231,12 +251,12 @@ def detect_shell_rc() -> Path | None:
 
 
 def is_already_configured(rc: Path | None) -> bool:
-    """Check if ANTHROPIC_AUTH_TOKEN is already set in shell rc."""
+    """Check if ANTHROPIC environment vars are already set in shell rc."""
     if rc is None or not rc.exists():
         return False
     try:
-        text = rc.read_text(encoding="utf-8")
-        return "ANTHROPIC_AUTH_TOKEN" in text and "God" in text
+        text = rc.read_text(encoding="utf-8", errors="replace")
+        return "ANTHROPIC_AUTH_TOKEN" in text and "ANTHROPIC_BASE_URL" in text
     except OSError:
         return False
 
@@ -249,85 +269,226 @@ else:
     _HOME_BIN = Path.home() / ".local" / "bin"
 
 
+def _run_step(msg: str, fn, *args: object, **kwargs: object) -> object | None:
+    """Run a function with a dotted spinner. On failure, print ✗ error + cause."""
+    spinner = Spinner(msg)
+    spinner.start()
+    try:
+        result = fn(*args, **kwargs)
+        spinner.stop(success=True)
+        return result
+    except Exception as exc:
+        spinner.stop(success=False)
+        error(f"{msg}")
+        warn(f"Cause: {type(exc).__name__} — {exc}")
+        return None
+
+
+def _run_cmd(msg: str, args: list[str], timeout: int = 60) -> bool:
+    """Run a command with spinner and visible output. Returns True on success."""
+    spinner = Spinner(msg)
+    spinner.start()
+    try:
+        result = subprocess.run(
+            args,
+            timeout=timeout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode == 0:
+            spinner.stop(success=True)
+            return True
+        # Extract meaningful error from stderr
+        cause = (result.stderr or "").strip() or "exit code %d" % result.returncode
+        spinner.stop(success=False)
+        warn(f"Cause: {cause}")
+        return False
+    except FileNotFoundError:
+        spinner.stop(success=False)
+        warn(f"Cause: command not found — {args[0]}")
+        return False
+    except subprocess.TimeoutExpired:
+        spinner.stop(success=False)
+        warn(f"Cause: {msg} timed out after {timeout}s")
+        return False
+    except Exception as exc:
+        spinner.stop(success=False)
+        warn(f"Cause: {type(exc).__name__} — {exc}")
+        return False
+
+
 def _check_cmd(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
-def _run(*args: str, **kwargs: object) -> bool:
-    """Run a command, return True if it succeeded."""
+def _kill_process_group(pid: int) -> None:
+    """Kill an entire process group (children included)."""
     try:
-        result = subprocess.run(
-            args,
-            timeout=kwargs.get("timeout", 60),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            **{k: v for k, v in kwargs.items() if k in ("shell", "cwd")},
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+        os.killpg(os.getpgid(pid), 9)
+    except (ProcessLookupError, PermissionError, AttributeError):
+        try:
+            os.kill(pid, 9)
+        except (ProcessLookupError, PermissionError):
+            pass
 
 
-def _install_linux(pkg: str) -> bool:
-    """Install a package on Linux via the detected package manager."""
-    os_release = Path("/etc/os-release")
-    if not os_release.exists():
-        return False
-    text = os_release.read_text(encoding="utf-8", errors="replace").lower()
-    if "fedora" in text:
-        return _run("sudo", "dnf", "install", "-y", pkg)
-    if "debian" in text or "ubuntu" in text:
-        _run("sudo", "apt-get", "update", "-qq")
-        return _run("sudo", "apt-get", "install", "-y", "-qq", pkg)
-    if "arch" in text:
-        return _run("sudo", "pacman", "-S", pkg, "--noconfirm")
-    if "alpine" in text:
-        return _run("sudo", "apk", "add", pkg)
-    return False
+def _detect_os_release() -> str:
+    """Read /etc/os-release or /usr/lib/os-release, return normalized text."""
+    for p in ("/etc/os-release", "/usr/lib/os-release"):
+        candidate = Path(p)
+        if candidate.exists():
+            return candidate.read_text(encoding="utf-8", errors="replace").lower()
+    return ""
 
 
-def _install_macos(pkg: str) -> bool:
-    return _run("brew", "install", pkg)
+def _check_tools(*tools: str) -> bool:
+    """Check that every tool in *tools is available on PATH."""
+    return all(shutil.which(t) for t in tools)
 
 
-def _install_fzy() -> bool:
-    """Install fzy fuzzy finder."""
-    if _check_cmd("fzy"):
+def _download_with_progress(url: str, dest: Path, chunk_size: int = 65536) -> bool:
+    """Download a file with progress dots, returns True on success."""
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "claudefree-setup/1.0"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            total = int(resp.headers.get("Content-Length", 0))
+            downloaded = 0
+            dots = 0
+            sys.stdout.write(f"      Downloading ...")
+            sys.stdout.flush()
+            with open(dest, "wb") as f:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    # Show a dot for every ~256 KB to give visual progress
+                    if total:
+                        ticks = int(downloaded / max(total / 40, 1))
+                        while dots < ticks and dots < 40:
+                            sys.stdout.write(".")
+                            dots += 1
+                        sys.stdout.flush()
+            sys.stdout.write(f" ({downloaded / 1024:.0f} KB)\n")
+            sys.stdout.flush()
         return True
-    sub("Installing fzy via package manager...")
-    if sys.platform == "darwin":
-        _install_macos("fzy")
-    else:
-        _install_linux("fzy")
-    if _check_cmd("fzy"):
-        return True
-    # Try git build as fallback
-    sub_warn("Package install failed — trying git build...")
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-        ok = _run("git", "clone", "https://github.com/jhawthorn/fzy.git",
-                  cwd=tmp, timeout=120)
-        if ok:
-            _run("make", "-s", cwd=f"{tmp}/fzy", timeout=60)
-            _run("sudo", "make", "install", cwd=f"{tmp}/fzy")
-    return _check_cmd("fzy")
+    except Exception:
+        return False
 
 
 def _install_fzf() -> bool:
-    """Install fzf fuzzy finder (Windows)."""
-    if _check_cmd("fzf.exe"):
+    """Install fzf fuzzy finder (cross-platform)."""
+    fzf_bin = "fzf.exe" if sys.platform == "win32" else "fzf"
+    if _check_cmd(fzf_bin):
         return True
-    for mgr in ("winget", "scoop", "choco"):
-        if _check_cmd(mgr):
-            sub(f"Installing fzf via {mgr}...")
-            {
-                "winget": lambda: _run(mgr, "install", "fzf", "--accept-package-agreements", "--accept-source-agreements"),
-                "scoop": lambda: _run(mgr, "install", "fzf", "-y"),
-                "choco": lambda: _run(mgr, "install", "fzf", "-y"),
-            }[mgr]()
-            if _check_cmd("fzf.exe"):
+
+    # macOS: Homebrew
+    if sys.platform == "darwin":
+        if _run_cmd("Installing fzf via Homebrew", ["brew", "install", "fzf"]):
+            return True
+
+    # Linux: package managers
+    if sys.platform == "linux" or sys.platform == "darwin":
+        text = _detect_os_release()
+        if text:
+            ok = False
+            if "fedora" in text:
+                ok = _run_cmd("Installing fzf via dnf", ["sudo", "dnf", "install", "-y", "fzf"])
+            elif "debian" in text or "ubuntu" in text:
+                _run_cmd("Updating apt cache", ["sudo", "apt-get", "update", "-qq"])
+                ok = _run_cmd("Installing fzf via apt", ["sudo", "apt-get", "install", "-y", "-qq", "fzf"])
+            elif "arch" in text:
+                ok = _run_cmd("Installing fzf via pacman", ["sudo", "pacman", "-S", "fzf", "--noconfirm"])
+            elif "alpine" in text:
+                ok = _run_cmd("Installing fzf via apk", ["sudo", "apk", "add", "fzf"])
+            if ok:
                 return True
+
+    # Cross-platform: download binary from GitHub
+    import platform as _platform
+    arch = _platform.machine().lower()
+    sys_os = "darwin" if sys.platform == "darwin" else ("windows" if sys.platform == "win32" else "linux")
+    # Map arch
+    if arch in ("amd64", "x86_64"):
+        arch_part = "amd64"
+    elif arch in ("arm64", "aarch64"):
+        arch_part = "arm64"
+    else:
+        arch_part = "386"
+
+    ext = "zip" if sys.platform == "win32" else "tar.gz"
+    bin_name = "fzf.exe" if sys.platform == "win32" else "fzf"
+    fzf_url = (
+        "https://github.com/junegunn/fzf/releases/download/v0.60.3/"
+        f"fzf-0.60.3-{sys_os}_{arch_part}.{ext}"
+    )
+
+    dest_dir = _HOME_BIN
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = dest_dir / f"fzf.{ext}"
+    sub("Downloading fzf from GitHub...")
+    if _download_with_progress(fzf_url, archive_path):
+        import tarfile
+        try:
+            if ext == "zip":
+                import zipfile
+                with zipfile.ZipFile(archive_path, "r") as zf:
+                    for member in zf.infolist():
+                        if member.filename.endswith(bin_name) or member.filename == bin_name:
+                            member.filename = bin_name  # strip path
+                            zf.extract(member, dest_dir)
+                            break
+            else:
+                with tarfile.open(archive_path, "r:gz") as tf:
+                    for member in tf.getmembers():
+                        if member.name.endswith(bin_name) or member.name == bin_name:
+                            member.name = bin_name
+                            tf.extract(member, dest_dir)
+                            break
+            archive_path.unlink()
+            # Make executable on Unix
+            if sys.platform != "win32":
+                (dest_dir / bin_name).chmod(0o755)
+            if _check_cmd(bin_name):
+                sub_ok("fzf installed from GitHub release")
+                return True
+        except Exception:
+            pass
+
+    # Windows fallback: package managers
+    if sys.platform == "win32":
+        for mgr in ("winget", "scoop", "choco"):
+            if _check_cmd(mgr):
+                sub(f"Installing fzf via {mgr}...")
+                try:
+                    if mgr == "winget":
+                        args = [mgr, "install", "fzf",
+                                "--accept-package-agreements", "--accept-source-agreements"]
+                    elif mgr == "scoop":
+                        args = [mgr, "install", "fzf", "-y"]
+                    else:  # choco
+                        args = [mgr, "install", "fzf", "-y"]
+                    with subprocess.Popen(
+                        args,
+                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        text=True,
+                    ) as proc:
+                        shown = 0
+                        for line in proc.stdout:  # type: ignore[union-attr]
+                            if shown < 3:
+                                sys.stdout.write(f"        {line}")
+                                shown += 1
+                            sys.stdout.flush()
+                        proc.wait(timeout=300)
+                    if _check_cmd("fzf.exe"):
+                        sub_ok(f"fzf installed via {mgr}")
+                        return True
+                    sub_warn(f"{mgr} failed — trying next...")
+                except (subprocess.TimeoutExpired, OSError):
+                    sub_warn(f"{mgr} timed out — trying next...")
     return False
 
 
@@ -337,6 +498,7 @@ def fetch_providers() -> dict | NoReturn:
     """Download and parse the providers JSON."""
     spinner = Spinner("Downloading provider list...")
     spinner.start()
+    data: bytes | None = None
     try:
         import urllib.request
         req = urllib.request.Request(PROVIDERS_URL, headers={
@@ -348,11 +510,11 @@ def fetch_providers() -> dict | NoReturn:
         spinner.stop(success=True)
     except Exception as exc:
         spinner.stop(success=False)
-        sys.stdout.write(f"\r{S.RST}")
+        sys.stdout.write(f"\r{S.RST}\n")
         error(f"Failed to fetch providers: {exc}")
         sys.exit(1)
-    sys.stdout.write(f"\r{S.RST}")
-    size_kb = len(data) / 1024
+    sys.stdout.write(f"\r{'':{COLS}}\r")  # clear spinner line (works on all terminals)
+    size_kb = len(data) / 1024  # type: ignore[arg-type]  # data is guaranteed set after successful try
     sub_ok(f"Provider list downloaded ({size_kb:.0f} KB)")
     return providers
 
@@ -403,18 +565,19 @@ def pick_models(providers: dict, provider: str) -> dict[str, str]:
     info(f"{len(model_names)} models available")
 
     def pick_one(tier: str) -> str:
-        print()
-        print(f"    {S.BLU}── Model for {S.BLD}{tier}{S.RST}{S.BLU} ──{S.RST}")
-        print(f"      {S.DIM} 0{S.RST}) [SAME_AS_DEFAULT]")
-        print(f"      {S.DIM} 1{S.RST}) [CUSTOM_MODEL]")
-        shown = 0
-        for name in model_names:
-            if shown >= 10:
-                break
-            print(f"      {S.DIM}{shown + 2:2d}{S.RST}) {name}")
-            shown += 1
-        if len(model_names) > 10:
-            print(f"      {S.DIM}... and {len(model_names) - 10} more available{S.RST}")
+        if not _use_fuzzy():
+            # No fuzzy finder — show static numbered list as fallback
+            print(f"    {S.BLU}── Model for {S.BLD}{tier}{S.RST}{S.BLU} ──{S.RST}")
+            print(f"      {S.DIM} 0{S.RST}) [SAME_AS_DEFAULT]")
+            print(f"      {S.DIM} 1{S.RST}) [CUSTOM_MODEL]")
+            shown = 0
+            for name in model_names:
+                if shown >= 10:
+                    break
+                print(f"      {S.DIM}{shown + 2:2d}{S.RST}) {name}")
+                shown += 1
+            if len(model_names) > 10:
+                print(f"      {S.DIM}... and {len(model_names) - 10} more available{S.RST}")
         fzf_opts = ["[SAME_AS_DEFAULT]", "[CUSTOM_MODEL]"] + model_names
         choice = fuzzy_select(fzf_opts, prompt=f"Search {tier}")
         if choice == "[CUSTOM_MODEL]":
@@ -454,31 +617,45 @@ def pick_models(providers: dict, provider: str) -> dict[str, str]:
 
 def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
     """Write config.json and merge/update .env."""
-    CONFIG_FILE.write_text(json.dumps({
-        "provider": provider,
-        "model_default": models["DEFAULT"],
-        "model_opus": models["OPUS"],
-        "model_sonnet": models["SONNET"],
-        "model_haiku": models["HAIKU"],
-    }, indent=2) + "\n", encoding="utf-8")
-    sub_ok("config.json written")
+    msg = "Writing configuration files..."
+    spinner = Spinner(msg)
+    spinner.start()
+    try:
+        CONFIG_FILE.write_text(json.dumps({
+            "provider": provider,
+            "model_default": models["DEFAULT"],
+            "model_opus": models["OPUS"],
+            "model_sonnet": models["SONNET"],
+            "model_haiku": models["HAIKU"],
+        }, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        spinner.stop(success=False)
+        error(f"Failed to write {CONFIG_FILE}")
+        warn(f"Cause: {exc}")
+        sys.exit(1)
 
     env_key = provider.upper().replace("-", "_") + "_API_KEY"
     updates = {env_key: api_key, "ANTHROPIC_AUTH_TOKEN": "God"}
 
     # Read existing .env (if any) and merge — preserving user's other keys
     new_lines = []
-    seen_keys = set()
+    seen_keys: set[str] = set()
     if ENV_FILE.exists():
-        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if "=" in stripped and not stripped.startswith("#"):
-                k = stripped.split("=", 1)[0].strip()
-                if k in updates:
-                    new_lines.append(f'{k}="{updates[k]}"')
-                    seen_keys.add(k)
-                    continue
-            new_lines.append(line)
+        try:
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if "=" in stripped and not stripped.startswith("#"):
+                    k = stripped.split("=", 1)[0].strip()
+                    if k in updates:
+                        new_lines.append(f'{k}="{updates[k]}"')
+                        seen_keys.add(k)
+                        continue
+                new_lines.append(line)
+        except OSError as exc:
+            spinner.stop(success=False)
+            error(f"Failed to read {ENV_FILE}")
+            warn(f"Cause: {exc}")
+            sys.exit(1)
     # Append any new keys not already in the file
     for k, v in updates.items():
         if k not in seen_keys:
@@ -488,24 +665,39 @@ def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
     if not ENV_FILE.exists():
         new_lines.insert(0, "# claudefree credentials")
 
-    ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    ENV_FILE.chmod(0o600)
-    sub_ok(".env updated (existing settings preserved)")
-    info(f"Config:  {S.DIM}{CONFIG_FILE}{S.RST}")
-    info(f"Secrets: {S.DIM}{ENV_FILE}{S.RST}")
+    try:
+        ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        # Restrict permissions on Unix; best-effort on Windows (may be no-op)
+        try:
+            ENV_FILE.chmod(0o600)
+        except (OSError, NotImplementedError):
+            pass
+    except OSError as exc:
+        spinner.stop(success=False)
+        error(f"Failed to write {ENV_FILE}")
+        warn(f"Cause: {exc}")
+        sys.exit(1)
+
+    spinner.stop(success=True)
+    # Config/Secrets paths not printed here — info prefix was removed,
+    # and the paths are shown transparently via the spinner message.
 
 
 def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
     """Add ANTHROPIC_* environment variables to shell rc (or Windows registry)."""
     if already_configured:
-        info("Shell environment already configured — skipped")
+        # No "already configured" info message — it was redundant noise.
         return
 
     if sys.platform == "win32":
         print()
         info("Setting ANTHROPIC environment variables (Windows)...")
-        _run("setx", "ANTHROPIC_AUTH_TOKEN", "God", timeout=10)
-        _run("setx", "ANTHROPIC_BASE_URL", "http://localhost:16324", timeout=10)
+        for var, val in [("ANTHROPIC_AUTH_TOKEN", "God"),
+                         ("ANTHROPIC_BASE_URL", "http://localhost:16324")]:
+            r = subprocess.run(["setx", var, val], capture_output=True, text=True, timeout=10)
+            if r.returncode != 0:
+                err = (r.stderr or "").strip()[:100] or f"setx {var} failed"
+                warn(f"Cause: {err}")
         sub_ok("Added to user environment variables")
         info("Restart your terminal for changes to take effect")
         return
@@ -514,42 +706,65 @@ def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
         info("No shell config file found — skipping")
         return
 
-    print()
-    info(f"Adding ANTHROPIC vars to {S.BLD}{rc.name}{S.RST}")
+    msg = f"Adding ANTHROPIC vars to {rc.name}..."
+    spinner = Spinner(msg)
+    spinner.start()
+    try:
+        if rc.exists():
+            backup = rc.with_suffix(rc.suffix + ".backup")
+            shutil.copy2(rc, backup)
 
-    if rc.exists():
-        backup = rc.with_suffix(rc.suffix + ".backup")
-        shutil.copy2(rc, backup)
+        with rc.open("a", encoding="utf-8", errors="replace") as fh:
+            fh.write("\n# claudefree Configuration\n")
+            fh.write('export ANTHROPIC_AUTH_TOKEN="God"\n')
+            fh.write('export ANTHROPIC_BASE_URL="http://localhost:16324"\n')
+        spinner.stop(success=True)
+    except (OSError, PermissionError) as exc:
+        spinner.stop(success=False)
+        error(f"Failed to write to {rc}")
+        warn(f"Cause: {exc}")
+        info(f"Manual fix: add these lines to {rc}:")
+        print(f'    export ANTHROPIC_AUTH_TOKEN="God"')
+        print(f'    export ANTHROPIC_BASE_URL="http://localhost:16324"')
+        info(f"Then run: source {rc.name}")
 
-    with rc.open("a", encoding="utf-8") as fh:
-        fh.write("\n# claudefree Configuration\n")
-        fh.write('export ANTHROPIC_AUTH_TOKEN="God"\n')
-        fh.write('export ANTHROPIC_BASE_URL="http://localhost:16324"\n')
-
-    sub_ok(f"Added to {rc.name}")
     info(f"Run: {S.BLD}source {rc.name}{S.RST}  (or restart terminal)")
 
 
 def install_start_server() -> None:
     """Install claude-start-server to PATH."""
     print()
-    info("Installing claude-start-server to PATH...")
-    _HOME_BIN.mkdir(parents=True, exist_ok=True)
+    msg = "Installing claude-start-server to PATH..."
+    spinner = Spinner(msg)
+    spinner.start()
+    try:
+        _HOME_BIN.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        spinner.stop(success=False)
+        error("Failed to create ~/.local/bin")
+        warn(f"Cause: {exc}")
+        return
 
     if sys.platform == "win32":
         dest_bat = _HOME_BIN / "claude-start-server.bat"
-        # Create a wrapper .bat that cds into project dir (no uv dependency)
-        wrapper_content = f"""@echo off
-setlocal
-set "DIR={SCRIPT_DIR}"
-cd /d "%DIR%"
-if exist "%DIR%\\.venv\\Scripts\\python.exe" (
-    "%DIR%\\.venv\\Scripts\\python.exe" -m cli.entrypoints %*
-) else (
-    python -m cli.entrypoints %*
-)"""
-        dest_bat.write_text(wrapper_content, encoding="utf-8")
-        
+        try:
+            dest_bat.write_text((
+                '@echo off\n'
+                'setlocal\n'
+                f'set "DIR={SCRIPT_DIR}"\n'
+                'cd /d "%DIR%"\n'
+                'if exist "%DIR%\\.venv\\Scripts\\python.exe" (\n'
+                '    "%DIR%\\.venv\\Scripts\\python.exe" -m cli.entrypoints %*\n'
+                ') else (\n'
+                '    python -m cli.entrypoints %*\n'
+                ')'
+            ), encoding="utf-8")
+        except OSError as exc:
+            spinner.stop(success=False)
+            error("Failed to write claude-start-server.bat")
+            warn(f"Cause: {exc}")
+            return
+
         # Add ~\.local\bin to user PATH via PowerShell (safer than setx)
         ps_add_path = (
             f'$p = [Environment]::GetEnvironmentVariable("PATH","User");'
@@ -557,29 +772,42 @@ if exist "%DIR%\\.venv\\Scripts\\python.exe" (
             f'  [Environment]::SetEnvironmentVariable("PATH",$p+";{_HOME_BIN}","User")'
             f'}}'
         )
-        subprocess.run(
+        r = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_add_path],
-            capture_output=True, timeout=15,
+            capture_output=True, text=True, timeout=15,
         )
-        sub_ok("claude-start-server.bat installed to ~/.local/bin")
-        sub_ok("~/.local/bin added to user PATH")
-        info("Restart your terminal to use 'claude-start-server'")
+        if r.returncode != 0:
+            err = (r.stderr or "").strip()[:100]
+            warn(f"PATH auto-add failed: {err}")
+            info(f"Add manually: setx PATH \"%PATH%;{_HOME_BIN}\"")
+        spinner.stop(success=True)
+        sub_ok("claude-start-server.bat installed")
+        info("Restart terminal to use 'claude-start-server'")
         return
 
     src = SCRIPT_DIR / "claude-start-server"
     dest = _HOME_BIN / "claude-start-server"
-    if src.exists():
+    if not src.exists():
+        spinner.stop(success=False)
+        warn(f"Cause: claude-start-server not found at {src}")
+        return
+
+    try:
+        if dest.exists() or dest.is_symlink():
+            dest.unlink()
+        dest.symlink_to(src)
+        mode = "symlink"
+    except (OSError, NotImplementedError) as exc1:
         try:
-            if dest.exists():
-                dest.unlink()
-            dest.symlink_to(src)
-            mode = "symlink"
-        except (OSError, NotImplementedError):
             shutil.copy2(src, dest)
             mode = "copy"
-        sub_ok(f"~/.local/bin/claude-start-server ({mode})")
-    else:
-        warn("claude-start-server not found in project")
+        except OSError as exc2:
+            spinner.stop(success=False)
+            error("Failed to install claude-start-server")
+            warn(f"Cause: symlink failed ({exc1}); copy also failed ({exc2})")
+            return
+    spinner.stop(success=True)
+    sub_ok(f"claude-start-server installed to ~/.local/bin ({mode})")
 
 
 def _find_claude() -> str | None:
@@ -601,7 +829,9 @@ def _find_claude() -> str | None:
 def check_claude_cli() -> None:
     """Check for claude CLI, offer to install if missing."""
     print()
-    info("Checking Claude Code CLI...")
+    msg = "Checking Claude Code CLI..."
+    spinner = Spinner(msg)
+    spinner.start()
     claude_path = _find_claude()
     if claude_path:
         try:
@@ -609,56 +839,156 @@ def check_claude_cli() -> None:
                 [claude_path, "--version"], capture_output=True, text=True,
                 timeout=10,
             ).stdout.strip() or "installed"
+            spinner.stop(success=True)
             sub_ok(f"claude CLI found ({ver})")
             return
         except (FileNotFoundError, OSError):
             pass  # binary exists but can't run
-    
+
+    spinner.stop(success=False)
+    warn("claude CLI not found \u2014 installing...")
+
     ok = False
     if sys.platform == "win32":
-        # Windows: try PowerShell installer first, then winget
-        warn("claude not found — installing via PowerShell...")
+        # Windows: try PowerShell installer first
+        ps_spinner = Spinner("Installing via PowerShell...")
+        ps_spinner.start()
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", 
+                ["powershell", "-NoProfile", "-Command",
                  "irm https://claude.ai/install.ps1 | iex"],
-                timeout=300,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=300, capture_output=True, text=True,
             )
-            ok = result.returncode == 0
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-        
+            if result.returncode == 0:
+                ps_spinner.stop(success=True)
+                ok = True
+            else:
+                err = (result.stderr or "").strip()[:100] or "non-zero exit"
+                ps_spinner.stop(success=False)
+                warn(f"Cause: PowerShell installer: {err}")
+        except subprocess.TimeoutExpired:
+            ps_spinner.stop(success=False)
+            warn("Cause: PowerShell installer timed out after 300s")
+        except OSError as exc:
+            ps_spinner.stop(success=False)
+            warn(f"Cause: PowerShell not available \u2014 {exc}")
+
         # Fallback to winget
         if not ok:
-            sub_warn("PowerShell installer failed — trying winget...")
+            w_spinner = Spinner("Trying winget...")
+            w_spinner.start()
             try:
                 result = subprocess.run(
-                    ["winget", "install", "Anthropic.ClaudeCode", 
+                    ["winget", "install", "Anthropic.ClaudeCode",
                      "--accept-package-agreements", "--accept-source-agreements"],
-                    timeout=300,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=300, capture_output=True, text=True,
                 )
-                ok = result.returncode == 0
-            except (subprocess.TimeoutExpired, OSError):
-                pass
+                if result.returncode == 0:
+                    w_spinner.stop(success=True)
+                    ok = True
+                else:
+                    err = (result.stderr or "").strip()[:100] or "winget failed"
+                    w_spinner.stop(success=False)
+                    warn(f"Cause: {err}")
+            except subprocess.TimeoutExpired:
+                w_spinner.stop(success=False)
+                warn("Cause: winget timed out after 300s")
+            except OSError as exc:
+                w_spinner.stop(success=False)
+                warn(f"Cause: winget not available \u2014 {exc}")
     else:
-        # macOS/Linux/WSL: use curl installer
-        warn("claude not found — installing via curl installer...")
-        try:
-            result = subprocess.run(
-                "curl -fsSL https://claude.ai/install.sh | bash",
-                shell=True, timeout=300,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
-            ok = result.returncode == 0
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-    
+        # macOS/Linux/WSL: download install script to temp file first (avoids
+        # piped-curl SSL errors and gives a clear error on network failure)
+        install_script = None
+        curl_spinner = Spinner("Downloading install script...")
+        curl_spinner.start()
+        import tempfile
+        for tool, flags in [
+            ("curl", ["curl", "-fsSL", "https://claude.ai/install.sh"]),
+            ("wget", ["wget", "-qO-", "https://claude.ai/install.sh"]),
+        ]:
+            if not shutil.which(tool):
+                continue
+            try:
+                tmp = tempfile.NamedTemporaryFile(mode="w+b", delete=False, suffix=".sh")
+                dl = subprocess.run(
+                    flags, stdout=tmp, stderr=subprocess.PIPE,
+                    timeout=60,
+                )
+                tmp.close()
+                if dl.returncode == 0:
+                    install_script = tmp.name
+                    curl_spinner.stop(success=True)
+                    break
+                else:
+                    err = (dl.stderr or b"").decode("utf-8", errors="replace").strip()[:100]
+                    curl_spinner.stop(success=False)
+                    warn(f"Cause: {tool}: {err}")
+                    curl_spinner = Spinner("Trying wget...")
+                    curl_spinner.start()
+            except Exception as exc:
+                curl_spinner.stop(success=False)
+                warn(f"Cause: {tool}: {exc}")
+                curl_spinner = Spinner("Trying wget...")
+                curl_spinner.start()
+
+        if install_script:
+            run_spinner = Spinner("Running install script...")
+            run_spinner.start()
+            try:
+                result = subprocess.run(
+                    ["bash", install_script],
+                    timeout=300, capture_output=True, text=True,
+                )
+                if result.returncode == 0:
+                    run_spinner.stop(success=True)
+                    ok = True
+                else:
+                    err = (result.stderr or "").strip()[:100] or f"exit {result.returncode}"
+                    run_spinner.stop(success=False)
+                    warn(f"Cause: {err}")
+            except subprocess.TimeoutExpired:
+                run_spinner.stop(success=False)
+                warn("Cause: install script timed out after 300s")
+            finally:
+                try:
+                    Path(install_script).unlink(missing_ok=True)
+                except OSError:
+                    pass
+        # Fallback: try npm if available
+
+        # Stop any dangling spinner from failed download attempts
+        if not install_script:
+            try:
+                curl_spinner.stop(success=False)
+            except Exception:
+                pass
+        if not ok and shutil.which("npm"):
+            npm_spinner = Spinner("Trying npm install -g @anthropic-ai/claude-code...")
+            npm_spinner.start()
+            try:
+                r = subprocess.run(
+                    ["npm", "install", "-g", "@anthropic-ai/claude-code"],
+                    timeout=120, capture_output=True, text=True,
+                )
+                if r.returncode == 0:
+                    npm_spinner.stop(success=True)
+                    ok = True
+                else:
+                    err = (r.stderr or "").strip()[:100] or f"exit {r.returncode}"
+                    npm_spinner.stop(success=False)
+                    warn(f"Cause: npm: {err}")
+            except subprocess.TimeoutExpired:
+                npm_spinner.stop(success=False)
+                warn("Cause: npm install timed out")
+            except OSError as exc:
+                npm_spinner.stop(success=False)
+                warn(f"Cause: {exc}")
+
     if ok and _check_cmd("claude"):
         sub_ok("claude installed")
     else:
-        sub_err("claude installation failed — please install manually from https://claude.ai")
+        sub_err("claude installation failed \u2014 install manually from https://claude.ai")
 
 
 def show_summary(provider: str, models: dict[str, str]) -> None:
@@ -690,7 +1020,7 @@ def show_summary(provider: str, models: dict[str, str]) -> None:
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    global _HAS_FZF, _HAS_FZY, _FUZZY_CMD
+    global _HAS_FZF, _FUZZY_CMD
 
     print_banner()
     # Determine if already configured
@@ -724,20 +1054,16 @@ def main() -> None:
     if uv_ok:
         sub_ok("uv found")
 
-    if sys.platform == "win32":
-        _install_fzf()
-    else:
-        _install_fzy()
+    _install_fzf()
 
     # Refresh fuzzy detection after install attempt
-    _HAS_FZF = bool(shutil.which("fzf"))
-    _HAS_FZY = bool(shutil.which("fzy"))
-    _FUZZY_CMD = "fzf" if _HAS_FZF else ("fzy" if _HAS_FZY else None)
+    _HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe"))
+    _FUZZY_CMD = "fzf" if _HAS_FZF else None
 
-    if _HAS_FZF or _HAS_FZY:
-        sub_ok("fzf ready" if _HAS_FZF else "fzy ready")
+    if _HAS_FZF:
+        sub_ok("fzf ready")
     else:
-        sub_warn("no fuzzy finder — using numbered menu")
+        sub_warn("no fzf — using numbered menu")
 
     # ── Step 2: Fetch providers ──────────────────────────────────────────
     print_step(2, TOTAL, "Fetching providers from models.dev")

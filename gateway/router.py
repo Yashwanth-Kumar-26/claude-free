@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 
@@ -42,17 +43,41 @@ async def create_message(
     rid = request.headers.get("x-request-id") or request.headers.get("request-id")
 
     async def _event_stream() -> AsyncIterator[bytes]:
+        # Claude Code cancels an in-flight turn when Esc is pressed.  Make the
+        # downstream connection authoritative: do not start (or keep) an
+        # expensive upstream request after the client has gone away.
+        if await request.is_disconnected():
+            logger.info("STREAM CANCELLED before start rid={}", rid)
+            return
+
         t0 = time.monotonic()
         chunks = 0
-        async for chunk in svc.stream(body, request_id=rid):
-            yield chunk.encode("utf-8")
-            chunks += 1
-        logger.info(
-            "STREAM DONE: chunks={} elapsed={:.2f}s rid={}",
-            chunks,
-            time.monotonic() - t0,
-            rid,
-        )
+        cancelled = False
+        stream = svc.stream(body, request_id=rid)
+        try:
+            async for chunk in stream:
+                if await request.is_disconnected():
+                    cancelled = True
+                    logger.info("STREAM CANCELLED by client rid={}", rid)
+                    return
+                yield chunk.encode("utf-8")
+                chunks += 1
+        except asyncio.CancelledError:
+            cancelled = True
+            logger.info("STREAM CANCELLED by client rid={}", rid)
+            raise
+        finally:
+            # Explicitly close the whole adapter chain.  This closes httpx
+            # streaming responses too, so a cancelled turn cannot continue
+            # consuming the old prompt in the background.
+            await stream.aclose()
+            logger.info(
+                "STREAM {}: chunks={} elapsed={:.2f}s rid={}",
+                "CANCELLED" if cancelled else "DONE",
+                chunks,
+                time.monotonic() - t0,
+                rid,
+            )
 
     return StreamingResponse(
         _event_stream(),

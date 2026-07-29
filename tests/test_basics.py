@@ -183,3 +183,74 @@ def test_model_selector_resolve():
     s   = sel.select("claude-sonnet-4-5")
     assert s.backend_id    == "opencode_go"
     assert s.backend_model == "anthropic/claude-sonnet-4-5"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_client_does_not_start_backend_stream():
+    """A disconnected Claude Code client must not dispatch a stale prompt."""
+    from types import SimpleNamespace
+
+    from gateway.router import create_message
+    from gateway.schemas import MessageParam, MessagesRequest
+
+    class Service:
+        called = False
+
+        async def stream(self, body, *, request_id=None):
+            self.called = True
+            yield "data: unexpected\n\n"
+
+    service = Service()
+
+    class Request:
+        def __init__(self):
+            self.headers = {}
+            self.app = SimpleNamespace(state=SimpleNamespace(service=service))
+
+        async def is_disconnected(self):
+            return True
+
+    response = await create_message(
+        MessagesRequest(model="test", messages=[MessageParam(role="user", content="old prompt")]),
+        Request(),
+    )
+    assert [chunk async for chunk in response.body_iterator] == []
+    assert service.called is False
+
+
+@pytest.mark.asyncio
+async def test_client_disconnect_closes_active_backend_stream():
+    """Esc during streaming closes the upstream generator before it can continue."""
+    from types import SimpleNamespace
+
+    from gateway.router import create_message
+    from gateway.schemas import MessageParam, MessagesRequest
+
+    class Request:
+        def __init__(self):
+            self.headers = {}
+            self.disconnected = False
+
+        async def is_disconnected(self):
+            return self.disconnected
+
+    request = Request()
+    closed = False
+
+    class Service:
+        async def stream(self, body, *, request_id=None):
+            nonlocal closed
+            try:
+                request.disconnected = True
+                yield "data: old prompt response\n\n"
+                yield "data: must not be read\n\n"
+            finally:
+                closed = True
+
+    request.app = SimpleNamespace(state=SimpleNamespace(service=Service()))
+    response = await create_message(
+        MessagesRequest(model="test", messages=[MessageParam(role="user", content="old prompt")]),
+        request,
+    )
+    assert [chunk async for chunk in response.body_iterator] == []
+    assert closed is True

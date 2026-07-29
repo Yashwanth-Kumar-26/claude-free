@@ -74,6 +74,7 @@ def ok(msg: str) -> None:
 
 
 def info(msg: str) -> None:
+    # No prefix — keep output clean.  Errors still carry ✗ via error().
     print(f"  {msg}")
 
 
@@ -678,11 +679,14 @@ def save_config(provider: str, api_key: str, models: dict[str, str]) -> None:
         sys.exit(1)
 
     spinner.stop(success=True)
+    # Config/Secrets paths not printed here — info prefix was removed,
+    # and the paths are shown transparently via the spinner message.
 
 
 def setup_shell_env(rc: Path | None, already_configured: bool) -> None:
     """Add ANTHROPIC_* environment variables to shell rc (or Windows registry)."""
     if already_configured:
+        # No "already configured" info message — it was redundant noise.
         return
 
     if sys.platform == "win32":

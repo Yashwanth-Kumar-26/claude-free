@@ -298,6 +298,11 @@ if sys.platform == "win32":
 else:
     _HOME_BIN = Path.home() / ".local" / "bin"
 
+# uv and fzf install into ~/.local/bin, which a fresh shell often leaves out
+# of PATH — prepend it now so freshly-installed tools are found immediately.
+if str(_HOME_BIN) not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = str(_HOME_BIN) + os.pathsep + os.environ.get("PATH", "")
+
 
 def _run_step(msg: str, fn, *args: object, **kwargs: object) -> object | None:
     """Run a function with a dotted spinner. On failure, print ✗ error + cause."""
@@ -543,24 +548,19 @@ def _install_fzf() -> bool:
                 sub(f"Installing fzf via {mgr}...")
                 try:
                     if mgr == "winget":
-                        args = [mgr, "install", "fzf",
+                        # --source winget avoids the msstore source, whose
+                        # license agreement text pollutes output and which can
+                        # fail on region/country restrictions.
+                        args = [mgr, "install", "fzf", "--source", "winget",
                                 "--accept-package-agreements", "--accept-source-agreements"]
                     elif mgr == "scoop":
                         args = [mgr, "install", "fzf", "-y"]
                     else:  # choco
                         args = [mgr, "install", "fzf", "-y"]
-                    with subprocess.Popen(
+                    subprocess.run(
                         args,
-                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True,
-                    ) as proc:
-                        shown = 0
-                        for line in proc.stdout:  # type: ignore[union-attr]
-                            if shown < 3:
-                                sys.stdout.write(f"        {line}")
-                                shown += 1
-                            sys.stdout.flush()
-                        proc.wait(timeout=300)
+                        capture_output=True, text=True, timeout=300,
+                    )
                     if _check_cmd("fzf.exe"):
                         sub_ok(f"fzf installed via {mgr}")
                         return True
@@ -960,6 +960,7 @@ def check_claude_cli() -> None:
             try:
                 result = subprocess.run(
                     ["winget", "install", "Anthropic.ClaudeCode",
+                     "--source", "winget",
                      "--accept-package-agreements", "--accept-source-agreements"],
                     timeout=300, capture_output=True, text=True,
                 )
@@ -1169,14 +1170,9 @@ def main() -> None:
 
     _install_fzf()
 
-    # Refresh fuzzy detection — fzf might have been installed to
-    # ~/.local/bin which isn't always in $PATH on first run.
-    _fzf_local = str(_HOME_BIN / ("fzf.exe" if sys.platform == "win32" else "fzf"))
-    _HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe") or Path(_fzf_local).is_file())
-    if _HAS_FZF:
-        # Ensure it's on PATH for subprocess calls
-        os.environ.setdefault("PATH", "")
-        os.environ["PATH"] = str(_HOME_BIN) + os.pathsep + os.environ["PATH"]
+    # Refresh fuzzy detection — fzf may have just been installed to
+    # ~/.local/bin (already on PATH via the startup prepend).
+    _HAS_FZF = bool(shutil.which("fzf") or shutil.which("fzf.exe"))
     _FUZZY_CMD = "fzf" if _HAS_FZF else None
 
     if _HAS_FZF:

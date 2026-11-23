@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claudefree: one gateway, 150+ providers for Claude Code</title>
+<meta name="description" content="An Anthropic-compatible proxy that routes Claude Code to OpenRouter, NVIDIA NIM, Groq, Mistral, DeepSeek, Ollama cloud and 150+ more backends.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23b39bff'/%3E%3Ccircle cx='9' cy='16' r='4' fill='%2314101f'/%3E%3Cpath d='M13 16h8' stroke='%2314101f' stroke-width='3'/%3E%3Ccircle cx='24' cy='16' r='2.5' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14101f; --violet:#b39bff; --cyan:#27d3ff; --sun:#ffe14a; --ice:#eefaff; --white:#fff;
+  --display:"Dela Gothic One","Hiragino Sans","Yu Gothic",Impact,sans-serif;
+  --body:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --dots:radial-gradient(circle,rgba(20,16,31,.2) 1.4px,transparent 1.8px) 0 0/10px 10px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ice);color:var(--ink);font:500 1.0625rem/1.65 var(--body);-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--sun)}
+a{color:inherit;text-underline-offset:.22em}
+:focus-visible{outline:4px solid var(--ink);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 clamp(1.25rem,4vw,3rem)}
+.ink{border:4px solid var(--ink);border-radius:18px}
+
+/* hero: pink field + speed-line burst */
+.hero-bg{position:relative;background:var(--violet);overflow:hidden;clip-path:polygon(0 0,100% 0,100% calc(100% - 3.5rem),0 100%);padding-bottom:3.5rem}
+.hero-bg::before{content:"";position:absolute;inset:-40%;background:repeating-conic-gradient(from 0deg at 72% 48%,rgba(255,255,255,.34) 0 1.6deg,transparent 1.6deg 6deg);z-index:0}
+.hero-bg::after{content:"";position:absolute;inset:0;background:var(--dots);opacity:.55;z-index:0;mix-blend-mode:multiply}
+.hero-bg>.wrap{position:relative;z-index:1}
+header.top{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 0}
+.brand{font:400 1.5rem/1 var(--display);text-decoration:none}
+.brand i{font-style:normal;background:var(--ink);color:var(--sun);padding:.1rem .45rem;margin-left:.15rem;border-radius:8px;display:inline-block;transform:rotate(-3deg)}
+.top a.gh{font-weight:900;text-decoration:none;background:var(--white);border:3px solid var(--ink);padding:.45rem 1rem;border-radius:999px;transition:transform .25s var(--ease),background .2s}
+.top a.gh:hover{background:var(--sun);transform:rotate(-3deg) scale(1.05)}
+.hero{display:grid;grid-template-columns:1.05fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:center;padding:clamp(1.5rem,5vw,4rem) 0 clamp(2.5rem,6vw,4.5rem)}
+.vert{position:absolute;right:.4rem;top:5rem;writing-mode:vertical-rl;font:400 1.1rem var(--display);letter-spacing:.35em;color:var(--ink);opacity:.8}
+h1{font:400 clamp(2.8rem,7vw,5.4rem)/1.02 var(--display);letter-spacing:-.01em;margin:0 0 1.4rem;text-wrap:balance}
+h1 em{font-style:normal;color:var(--white);-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;display:inline-block;transform:rotate(-2deg)}
+.lede{max-width:34ch;font-size:1.2rem;font-weight:700;margin:0 0 2rem}
+.cta{display:flex;flex-wrap:wrap;gap:.9rem}
+.btn{font:900 1rem var(--body);display:inline-flex;align-items:center;padding:.9rem 1.5rem;border-radius:999px;border:4px solid var(--ink);background:var(--white);color:var(--ink);cursor:pointer;text-decoration:none;transition:transform .25s var(--ease),background .2s}
+.btn:hover{transform:translateY(-3px) rotate(-2deg);background:var(--sun)}
+.btn.primary{background:var(--sun)}
+.btn.primary:hover{background:var(--cyan)}
+
+/* patch bay */
+.bay{position:relative;background:var(--white);padding:clamp(1.1rem,2.4vw,1.7rem);transform:rotate(1.2deg);box-shadow:0 14px 0 -6px rgba(20,16,31,.9)}
+.bay-grid{position:relative;display:grid;grid-template-columns:auto 1fr;gap:clamp(1.5rem,6vw,3.5rem);align-items:center;min-height:22rem}
+.src{display:flex;flex-direction:column;align-items:center;gap:.5rem;font:900 .85rem var(--body)}
+.jack{width:34px;height:34px;border-radius:50%;background:var(--ink);border:4px solid var(--ink);position:relative;flex:none;transition:background .25s}
+.jack::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--white)}
+.src .jack{background:var(--violet)}
+.provs{list-style:none;margin:0;padding:0;display:grid;gap:.3rem;position:relative;z-index:2}
+.prov{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:.9rem;width:100%;padding:.45rem .7rem;border-radius:12px;cursor:pointer;font:700 1rem var(--body);transition:background .2s,transform .25s var(--ease)}
+.prov:hover{background:var(--ice);transform:translateX(4px)}
+.prov:focus-visible{outline:4px solid var(--ink)}
+.prov[aria-pressed=true]{background:var(--sun);font-weight:900}
+.prov[aria-pressed=true] .jack{background:var(--cyan)}
+.prov small{margin-left:auto;font:500 .72rem var(--mono);opacity:.75}
+svg.cord{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible}
+.sfx{position:absolute;z-index:3;right:6%;top:-1.4rem;font:400 2rem var(--display);color:var(--white);-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;opacity:0;transform:rotate(8deg) scale(.4);pointer-events:none}
+.sfx.go{animation:pop .7s var(--ease)}
+@keyframes pop{0%{opacity:0;transform:rotate(8deg) scale(.4)}25%{opacity:1;transform:rotate(-6deg) scale(1.15)}100%{opacity:0;transform:rotate(-6deg) scale(1)}}
+.readout{margin:1.3rem 0 0;padding:1rem 1.1rem;background:var(--ink);border-radius:12px;font:400 .86rem/1.7 var(--mono);color:#d9d6ff;overflow-x:auto}
+.readout b{color:var(--sun);font-weight:500}
+.readout .note{display:block;margin-top:.5rem;color:#a29ec9;font-size:.74rem}
+
+/* panels */
+section{position:relative;padding:clamp(3.5rem,8vw,6rem) 0}
+.s-sun{background:var(--sun);clip-path:polygon(0 3rem,100% 0,100% calc(100% - 3rem),0 100%);margin-top:-3rem;padding-top:calc(clamp(3.5rem,8vw,6rem) + 3rem)}
+.s-sun::before{content:"";position:absolute;inset:0;background:var(--dots);opacity:.5;pointer-events:none}
+.s-cyan{background:var(--cyan)}
+.s-cyan::before{content:"";position:absolute;inset:0;background:var(--dots);opacity:.5;pointer-events:none}
+.s-violet{background:var(--violet);clip-path:polygon(0 3rem,100% 0,100% 100%,0 100%);margin-top:-3rem;padding-top:calc(clamp(3.5rem,8vw,6rem) + 3rem)}
+.wrap>*{position:relative}
+h2{font:400 clamp(1.9rem,4.4vw,3.2rem)/1.08 var(--display);margin:0 0 1rem;text-wrap:balance}
+.sub{max-width:46ch;margin:0 0 2.4rem;font-weight:700}
+.steps{display:grid;gap:1.3rem;max-width:760px;counter-reset:s}
+.step{display:grid;grid-template-columns:3rem 1fr;gap:1rem;align-items:start}
+.step::before{counter-increment:s;content:counter(s);width:3rem;height:3rem;border-radius:50%;background:var(--violet);border:4px solid var(--ink);display:grid;place-items:center;font:400 1.3rem var(--display)}
+.step h3{margin:.3rem 0 .5rem;font:900 1.25rem var(--body)}
+.code{position:relative;background:var(--ink);color:#e6e3ff;border-radius:12px;padding:1rem 5rem 1rem 1.1rem;font:400 .9rem/1.65 var(--mono);overflow-x:auto;white-space:pre}
+.code button{position:absolute;top:.6rem;right:.6rem;font:900 .75rem var(--body);background:var(--sun);color:var(--ink);border:0;border-radius:8px;padding:.35rem .7rem;cursor:pointer}
+.code button:hover{background:var(--cyan)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:start}
+.flow{list-style:none;margin:0;padding:0}
+.flow li{position:relative;padding:0 0 1.5rem 3rem}
+.flow li::before{content:"";position:absolute;left:.25rem;top:.3rem;width:1.1rem;height:1.1rem;background:var(--sun);border:4px solid var(--ink);border-radius:50%}
+.flow li::after{content:"";position:absolute;left:.72rem;top:1.7rem;bottom:-.2rem;width:4px;background:var(--ink)}
+.flow li:last-child::after{display:none}
+.flow strong{display:block;font:400 1.2rem var(--display)}
+.flow span{font-weight:700}
+.panel{background:var(--white);padding:1.4rem}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:.7rem .6rem;border-bottom:2px solid var(--ink);vertical-align:top}
+th{font:900 .8rem var(--body)}
+td code{font:500 .82rem var(--mono);background:var(--ice);border:2px solid var(--ink);padding:.05rem .35rem;border-radius:6px}
+.tablewrap{overflow-x:auto}
+footer{background:var(--ink);color:var(--white);padding:clamp(3rem,7vw,5rem) 0 3rem}
+footer .big{font:400 clamp(2.4rem,7vw,5rem)/1.02 var(--display);margin:0 0 1.8rem}
+footer .big em{font-style:normal;color:var(--violet)}
+footer p.fine{color:#cfcaf5;margin:2rem 0 0;font-size:.95rem}
+.vert2{font-family:var(--display);color:var(--cyan);margin:0 0 1rem;letter-spacing:.2em;font-size:1rem}
+
+@media (prefers-reduced-motion:no-preference){
+  .hero>*{animation:rise .9s var(--ease) both}
+  .hero>*:nth-child(2){animation-delay:.12s}
+  @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+}
+@media (max-width:860px){
+  .hero,.two{grid-template-columns:1fr}
+  .vert{display:none}
+  .bay{transform:none}
+}
+</style>
+</head>
+<body>
+
+<div class="hero-bg">
+  <span class="vert" aria-hidden="true" lang="ja">ゲートウェイ</span>
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="#top">claude<i>free</i></a>
+      <a class="gh" href="https://github.com/Yashwanth-Kumar-26/claude-free">GitHub</a>
+    </header>
+    <main id="top" class="hero">
+      <div>
+        <h1>One gateway. <em>150+</em> providers.</h1>
+        <p class="lede">Point Claude Code at a local proxy. It speaks Anthropic on one side, and OpenRouter, NVIDIA NIM, Groq and the rest on the other.</p>
+        <div class="cta">
+          <a class="btn primary" href="#start">Get started</a>
+          <a class="btn" href="https://github.com/Yashwanth-Kumar-26/claude-free">View the repo</a>
+        </div>
+      </div>
+      <div class="bay ink" aria-label="Interactive demo: choose a provider to patch Claude Code into">
+        <span class="sfx" id="sfx" aria-hidden="true" lang="ja">カチッ!</span>
+        <div class="bay-grid" id="grid">
+          <svg class="cord" id="cordsvg" aria-hidden="true"><path id="cordshadow" fill="none" stroke="#14101f" stroke-width="13" stroke-linecap="round"/><path id="cordpath" fill="none" stroke="#27d3ff" stroke-width="7" stroke-linecap="round"/></svg>
+          <div class="src"><span class="jack" id="srcjack"></span>claude</div>
+          <ul class="provs" id="provs"></ul>
+        </div>
+        <div class="readout" id="readout" aria-live="polite"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<section class="s-sun" id="start">
+  <div class="wrap">
+    <h2>Running in three commands.</h2>
+    <p class="sub">Setup is one cross-platform script for Linux, macOS and Windows. It needs Python 3.12.</p>
+    <div class="steps">
+      <div class="step"><div><h3>Clone and run setup</h3>
+        <div class="code" data-copy>git clone https://github.com/Yashwanth-Kumar-26/claude-free.git
+cd claude-free
+python setup.py</div></div></div>
+      <div class="step"><div><h3>Start the proxy</h3><div class="code" data-copy>claude-start-server</div></div></div>
+      <div class="step"><div><h3>Open Claude in your project</h3><div class="code" data-copy>claude</div></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="s-cyan">
+  <div class="wrap two">
+    <div>
+      <h2>What happens to a request.</h2>
+      <p class="sub" style="margin:0">Claude Code never knows it left home. The gateway translates, streams, and hands back Anthropic-shaped events.</p>
+    </div>
+    <ol class="flow panel ink">
+      <li><strong>FastAPI gateway</strong><span>Auth, shortcuts and model selection.</span></li>
+      <li><strong>Backend adapter</strong><span>Converts the request format for the chosen provider.</span></li>
+      <li><strong>Transport layer</strong><span>HTTP streaming to the upstream.</span></li>
+      <li><strong>External API</strong><span>The provider endpoint you picked.</span></li>
+      <li><strong>SSE response</strong><span>Streamed back to Claude in Anthropic format.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section class="s-violet">
+  <div class="wrap two">
+    <div>
+      <h2>Swap providers with one file.</h2>
+      <p class="sub">Edit <code style="font-family:var(--mono)">config.json</code> or re-run <code style="font-family:var(--mono)">python setup.py</code>. Providers are discovered from the models.dev catalog, so new ones need no code changes.</p>
+      <div class="code" data-copy>{
+  "provider": "open_router",
+  "model_default": "...",
+  "model_opus": "...",
+  "model_sonnet": "...",
+  "model_haiku": "..."
+}</div>
+    </div>
+    <div class="tablewrap panel ink">
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>ANTHROPIC_BASE_URL</code></td><td>http://localhost:16324</td><td>Proxy URL for Claude</td></tr>
+          <tr><td><code>ANTHROPIC_AUTH_TOKEN</code></td><td>God</td><td>Auth token for the Claude client</td></tr>
+          <tr><td><code>{PROVIDER}_API_KEY</code></td><td>none</td><td>Your provider key</td></tr>
+          <tr><td><code>PORT</code></td><td>16324</td><td>Server port</td></tr>
+          <tr><td><code>HOST</code></td><td>0.0.0.0</td><td>Bind address</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="big">Plug in.<br><em>Keep coding.</em></p>
+    <a class="btn primary" href="https://github.com/Yashwanth-Kumar-26/claude-free">Star it on GitHub</a>
+    <p class="fine">Made by Yashwanth-Kumar-26 and saiadarsh-03. Provider catalog from models.dev.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var P=[["OpenRouter","open_router","native"],["NVIDIA NIM","nvidia_nim","openai-compat"],["OpenCode","opencode","multi-transport"],["Groq","groq",""],["Mistral","mistral",""],["DeepSeek","deepseek",""],["Ollama cloud","ollama",""],["+ 140 more","models.dev","catalog"]];
+  var list=document.getElementById("provs"),grid=document.getElementById("grid"),
+      path=document.getElementById("cordpath"),shadow=document.getElementById("cordshadow"),
+      src=document.getElementById("srcjack"),out=document.getElementById("readout"),
+      sfx=document.getElementById("sfx"),btns=[],sel=0,curY=null,raf=0;
+  P.forEach(function(p,i){
+    var li=document.createElement("li"),b=document.createElement("button");
+    b.className="prov";b.type="button";b.setAttribute("aria-pressed",i===0);
+    b.innerHTML='<span class="jack"></span>'+p[0]+(p[2]?'<small>'+p[2]+'</small>':'');
+    b.addEventListener("click",function(){choose(i)});
+    li.appendChild(b);list.appendChild(li);btns.push(b);
+  });
+  function pos(el){var g=grid.getBoundingClientRect(),r=el.getBoundingClientRect();return{x:r.left-g.left+r.width/2,y:r.top-g.top+r.height/2}}
+  function targetY(){return pos(btns[sel].querySelector(".jack")).y}
+  function draw(y){
+    var a=pos(src),b=pos(btns[sel].querySelector(".jack")),
+        sag=Math.min(70,Math.abs(y-a.y)*.2+34),mx=(a.x+b.x)/2,
+        d="M"+a.x+","+a.y+" C"+(a.x+(mx-a.x)*.9)+","+(a.y+sag)+" "+(b.x-(b.x-mx)*.9)+","+(y+sag)+" "+b.x+","+y;
+    path.setAttribute("d",d);shadow.setAttribute("d",d);
+  }
+  function tick(){
+    var t=targetY();curY=curY+(t-curY)*.16;draw(curY);
+    if(Math.abs(t-curY)>.4){raf=requestAnimationFrame(tick)}else{curY=t;draw(t)}
+  }
+  function show(){
+    var p=P[sel],note=p[1]==="open_router"?"":'<span class="note">Illustrative id. setup.py writes the real one for you.</span>';
+    out.innerHTML='<b>ANTHROPIC_BASE_URL</b>=http://localhost:16324<br>"provider": <b>"'+p[1]+'"</b>'+note;
+  }
+  function choose(i){
+    sel=i;btns.forEach(function(b,k){b.setAttribute("aria-pressed",k===i)});
+    show();cancelAnimationFrame(raf);
+    if(matchMedia("(prefers-reduced-motion:reduce)").matches){curY=targetY();draw(curY)}
+    else{raf=requestAnimationFrame(tick);sfx.classList.remove("go");void sfx.offsetWidth;sfx.classList.add("go")}
+  }
+  function init(){curY=targetY();draw(curY);show()}
+  window.addEventListener("resize",function(){curY=targetY();draw(curY)});
+  window.addEventListener("load",init);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(init);
+  init();
+  document.querySelectorAll("[data-copy]").forEach(function(c){
+    var b=document.createElement("button");b.type="button";b.textContent="Copy";
+    b.addEventListener("click",function(){
+      var txt=c.firstChild.textContent;
+      function ok(){b.textContent="Copied";setTimeout(function(){b.textContent="Copy"},1400)}
+      if(navigator.clipboard){navigator.clipboard.writeText(txt).then(ok,function(){b.textContent="Select text"})}else{b.textContent="Select text"}
+    });
+    c.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>
